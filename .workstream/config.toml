@@ -1,0 +1,8 @@
+name = "tessel"
+tags = []
+
+# Fichiers ignorés par git à prendre en compte quand même.
+include = []
+
+# Fichiers suivis par git à ignorer en plus.
+exclude = []

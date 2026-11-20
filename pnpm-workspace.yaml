@@ -1,0 +1,11 @@
+packages:
+  - "apps/*"
+  - "packages/*"
+
+# Lieur isolé (défaut de pnpm) : Expo le supporte depuis le SDK 54, et ream-cli ne
+# cherche ses dépendances que dans le node_modules de l'app (bug 033 de ream-cli).
+
+# Native/binary postinstall steps we accept to run.
+allowBuilds:
+  "@swc/core": true
+  esbuild: true

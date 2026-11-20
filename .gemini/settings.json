@@ -1,0 +1,9 @@
+{
+	"mcpServers": {
+		"workstream": {
+			"command": "workstream",
+			"args": ["mcp"],
+			"trust": true
+		}
+	}
+}

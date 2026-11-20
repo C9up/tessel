@@ -1,0 +1,13 @@
+[package]
+name = "tessel-core"
+version = "0.1.0"
+description = "Cœur client de Tessel : MLS, base locale chiffrée, file d'envoi, chiffrement des médias."
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[lib]
+crate-type = ["lib"]
+
+[lints]
+workspace = true

@@ -1,0 +1,24 @@
+{
+  "name": "tessel",
+  "private": true,
+  "description": "Messagerie chiffrée de bout en bout, web et mobile, bâtie sur c9up Ream.",
+  "packageManager": "pnpm@12.4.0",
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "test": "turbo run test && cargo test --workspace",
+    "lint": "biome check . && turbo run lint && cargo clippy --workspace --all-targets -- -D warnings",
+    "typecheck": "turbo run typecheck",
+    "check": "pnpm lint && pnpm typecheck && pnpm test && cargo deny check && cargo audit",
+    "format": "biome check --write .",
+    "infra": "podman-compose --env-file apps/server/.env up -d",
+    "infra:down": "podman-compose --env-file apps/server/.env down"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.6.8",
+    "turbo": "^2.11.13"
+  }
+}

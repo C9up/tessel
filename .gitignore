@@ -1,0 +1,31 @@
+node_modules/
+.turbo/
+dist/
+coverage/
+*.log
+.DS_Store
+
+# Rust (souvent un lien vers un dossier de build hors du dépôt)
+/target
+
+# Réglages locaux des agents
+.claude/settings.local.json
+
+# Secrets locaux
+.env
+.env.*
+!.env.example
+
+# Workstream : seul l'état local de l'application est ignoré, le travail se commite.
+.workstream/.local/
+
+# Projets natifs : régénérés par `expo prebuild`, jamais édités à la main.
+apps/*/android/
+apps/*/ios/
+.expo/
+apps/*/.expo/
+expo-env.d.ts
+
+# Sorties générées du cœur Rust (liaisons WASM et natives)
+packages/*/pkg/
+packages/*/generated/

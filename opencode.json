@@ -1,0 +1,12 @@
+{
+	"mcp": {
+		"workstream": {
+			"type": "local",
+			"command": ["workstream", "mcp"],
+			"enabled": true
+		}
+	},
+	"permission": {
+		"workstream_*": "allow"
+	}
+}

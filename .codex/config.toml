@@ -1,0 +1,4 @@
+[mcp_servers.workstream]
+command = "workstream"
+args = ["mcp"]
+default_tools_approval_mode = "approve"
