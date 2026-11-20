@@ -180,7 +180,7 @@ fn no_truncated_prefix_makes_parsing_panic() {
 }
 
 #[test]
-fn une_cle_qui_n_est_pas_ed25519_est_refusee() {
+fn a_key_that_is_not_ed25519_is_rejected() {
     let account_key = AccountKey::generate().unwrap();
     assert_eq!(
         account_key

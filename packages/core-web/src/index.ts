@@ -1,13 +1,24 @@
-import init, { ciphersuite, initSync, selfCheck, version } from '../generated/tessel_wasm.js'
+import init, { ciphersuite, generateStoreKey, initSync, selfCheck, version } from '../generated/tessel_wasm.js'
+
+export {
+  INDEXEDDB_SCHEMA_VERSION,
+  IndexedDbStore,
+  loadStoreKey,
+  type StoreChanges,
+  type StoredRecord,
+  UnsupportedSchemaError,
+} from './store.ts'
 
 /** What the core offers to the web client. Grows with epic 02 (story 02-10). */
 export interface TesselCore {
   version(): string
   /** IANA name of the MLS ciphersuite (ADR-001). */
   ciphersuite(): string
+  /** Draws a new key for the local database, to seal at once (`loadStoreKey`). */
+  generateStoreKey(): Uint8Array
 }
 
-const core: TesselCore = { version, ciphersuite }
+const core: TesselCore = { version, ciphersuite, generateStoreKey }
 
 /**
  * Loads the WASM module (in the browser, from the URL next to the generated JS, or

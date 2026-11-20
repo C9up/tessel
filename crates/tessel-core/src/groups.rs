@@ -27,9 +27,12 @@ use openmls_traits::OpenMlsProvider;
 use tls_codec::{Deserialize as _, Serialize as _};
 
 use crate::client::Client;
+use crate::codec::{CodecError, Reader, Writer};
+use crate::history::{Effect, Ignored};
 use crate::identity::{AccountId, Device, DeviceCertificate, DeviceId, IdentityError};
-use crate::key_packages::{VerifiedKeyPackage, capabilities};
+use crate::key_packages::{VerifiedKeyPackage, capabilities, verify_key_package};
 use crate::messages::{Message, MessageError};
+use crate::store::StoreError;
 use crate::suite::CIPHERSUITE;
 
 /// Number of past epochs whose keys are kept, to read a message encrypted just before a
@@ -70,6 +73,13 @@ pub enum GroupError {
     /// The message to send violates the format (story 02-05).
     #[error(transparent)]
     Message(#[from] MessageError),
+    /// The edit or deletion to send would be ignored by every member (story 02-06):
+    /// it is not sent.
+    #[error("message would be ignored: {0:?}")]
+    Ignored(Ignored),
+    /// The local database failed (story 02-06).
+    #[error(transparent)]
+    Store(#[from] StoreError),
 }
 
 fn mls(error: impl fmt::Display) -> GroupError {
@@ -93,6 +103,10 @@ impl GroupId {
 
     fn of(group: &MlsGroup) -> Self {
         Self(group.group_id().as_slice().to_vec())
+    }
+
+    pub(crate) fn to_openmls(&self) -> openmls::prelude::GroupId {
+        openmls::prelude::GroupId::from_slice(&self.0)
     }
 }
 
@@ -127,10 +141,85 @@ impl Removal {
 /// A commit intent, kept until the server accepts it, so it can be replayed if another
 /// commit beat it.
 #[derive(Debug, Clone)]
-enum Operation {
+pub(crate) enum Operation {
     Add(Vec<VerifiedKeyPackage>),
     Remove(Vec<Removal>),
     CommitProposals,
+}
+
+/// Writes a pending intent into the client record of the local database (story 02-06).
+pub(crate) fn write_operation(
+    out: &mut Writer,
+    operation: Option<&Operation>,
+) -> Result<(), CodecError> {
+    let count = |n: usize| u16::try_from(n).map_err(|_| CodecError::TooLong);
+    match operation {
+        None => out.u8(0),
+        Some(Operation::Add(key_packages)) => {
+            out.u8(1);
+            out.u16(count(key_packages.len())?);
+            for key_package in key_packages {
+                let bytes = MlsMessageOut::from(key_package.key_package().clone())
+                    .tls_serialize_detached()
+                    .map_err(|_| CodecError::Malformed)?;
+                out.vec32(&bytes)?;
+            }
+        }
+        Some(Operation::Remove(removals)) => {
+            out.u8(2);
+            out.u16(count(removals.len())?);
+            for removal in removals {
+                let (account, device) = match removal {
+                    Removal::Account(account) => (account, None),
+                    Removal::Device(account, device) => (account, Some(device)),
+                };
+                out.vec16(account.to_string().as_bytes())?;
+                match device {
+                    None => out.u8(0),
+                    Some(device) => {
+                        out.u8(1);
+                        out.bytes(device.as_bytes());
+                    }
+                }
+            }
+        }
+        Some(Operation::CommitProposals) => out.u8(3),
+    }
+    Ok(())
+}
+
+/// Reads back an intent written by [`write_operation`]. A *KeyPackage* is verified again;
+/// one that no longer is (its validity ended meanwhile) is dropped from the intent.
+pub(crate) fn read_operation(input: &mut Reader<'_>) -> Result<Option<Operation>, CodecError> {
+    Ok(match input.u8()? {
+        0 => None,
+        1 => {
+            let mut key_packages = Vec::new();
+            for _ in 0..input.u16()? {
+                if let Ok(key_package) = verify_key_package(input.vec32()?) {
+                    key_packages.push(key_package);
+                }
+            }
+            Some(Operation::Add(key_packages))
+        }
+        2 => {
+            let mut removals = Vec::new();
+            for _ in 0..input.u16()? {
+                let account = std::str::from_utf8(input.vec16()?)
+                    .map_err(|_| CodecError::Malformed)?
+                    .parse::<AccountId>()
+                    .map_err(|_| CodecError::Malformed)?;
+                removals.push(match input.u8()? {
+                    0 => Removal::Account(account),
+                    1 => Removal::Device(account, DeviceId::from_bytes(input.array()?)),
+                    _ => return Err(CodecError::Malformed),
+                });
+            }
+            Some(Operation::Remove(removals))
+        }
+        3 => Some(Operation::CommitProposals),
+        _ => return Err(CodecError::Malformed),
+    })
 }
 
 /// A commit to send to the server, and the *Welcome* for the added devices.
@@ -155,6 +244,8 @@ pub enum Incoming {
         sender: DeviceCertificate,
         /// The message, or why it cannot be read.
         message: Result<Message, MessageError>,
+        /// What it changed in the history (story 02-06).
+        effect: Effect,
     },
     /// A proposal (a member leaving), kept until the next commit.
     Proposal {
@@ -181,8 +272,8 @@ pub enum Incoming {
 /// A group's state on the device.
 #[derive(Debug)]
 pub(crate) struct Group {
-    mls: MlsGroup,
-    pending: Option<Operation>,
+    pub(crate) mls: MlsGroup,
+    pub(crate) pending: Option<Operation>,
 }
 
 fn create_config() -> MlsGroupCreateConfig {
@@ -450,13 +541,25 @@ impl Client {
         Ok(id)
     }
 
-    /// Encrypts a message for the group, padding included (story 02-05).
+    /// Encrypts a message for the group, padding included (story 02-05), and records it
+    /// in the history (story 02-06). An edit or a deletion of a message this account did
+    /// not write is refused: every member would ignore it.
     pub fn send_message(
         &mut self,
         group: &GroupId,
         message: &Message,
     ) -> Result<Vec<u8>, GroupError> {
-        self.encrypt(group, &message.encode()?)
+        if !self.groups.contains_key(group) {
+            return Err(GroupError::UnknownGroup);
+        }
+        let author = self.device.certificate().account();
+        if let Some(reason) = self.history.verdict(group, author, message) {
+            return Err(GroupError::Ignored(reason));
+        }
+        let encrypted = self.encrypt(group, &message.encode()?)?;
+        let sender = self.device.certificate().clone();
+        self.record(group, &sender, message)?;
+        Ok(encrypted)
     }
 
     /// Encrypts bytes for the group. Everything goes through [`Client::send_message`],
@@ -486,11 +589,19 @@ impl Client {
         let sender = sender_certificate(&state.mls, processed.sender())?;
 
         match processed.into_content() {
-            ProcessedMessageContent::ApplicationMessage(data) => Ok(Incoming::Message {
-                group: id,
-                sender,
-                message: Message::decode(&data.into_bytes()),
-            }),
+            ProcessedMessageContent::ApplicationMessage(data) => {
+                let message = Message::decode(&data.into_bytes());
+                let effect = match &message {
+                    Ok(message) => self.record(&id, &sender, message)?,
+                    Err(_) => Effect::Nothing,
+                };
+                Ok(Incoming::Message {
+                    group: id,
+                    sender,
+                    message,
+                    effect,
+                })
+            }
             ProcessedMessageContent::ProposalMessage(proposal) => {
                 state
                     .mls
@@ -560,11 +671,13 @@ impl Client {
         Ok(state.mls.epoch().as_u64())
     }
 
-    /// Erases a group from the device, MLS state included.
+    /// Erases a group from the device, MLS state and history index included. Its
+    /// history stays readable.
     fn forget(&mut self, group: &GroupId) -> Result<(), GroupError> {
         if let Some(mut state) = self.groups.remove(group) {
             state.mls.delete(self.provider.storage()).map_err(mls)?;
         }
+        self.forget_history(group)?;
         Ok(())
     }
 }

@@ -59,13 +59,13 @@ mod tests {
     use super::*;
 
     #[test]
-    fn la_suite_est_la_suite_obligatoire_de_rfc_9420() {
+    fn the_suite_is_the_mandatory_suite_of_rfc_9420() {
         assert_eq!(u16::from(CIPHERSUITE), CIPHERSUITE_ID);
         assert_eq!(format!("{CIPHERSUITE:?}"), CIPHERSUITE_NAME);
     }
 
     #[test]
-    fn le_coeur_se_verifie_sur_l_hote() {
+    fn the_core_checks_itself_on_the_host() {
         assert_eq!(self_check(), Ok(()));
     }
 }

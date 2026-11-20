@@ -1,17 +1,24 @@
 //! Tessel client core.
 //!
 //! Everything that touches keys and encryption lives here, once, for the web (WASM)
-//! as well as for mobile (native). No private key leaves this crate.
+//! as well as for mobile (native). No private key leaves this crate, except sealed into
+//! the local database ([`store`]).
 
 mod client;
+mod codec;
 mod groups;
+mod history;
 mod identity;
 mod key_packages;
 mod messages;
+pub mod store;
 mod suite;
+#[cfg(test)]
+mod test_support;
 
 pub use client::Client;
 pub use groups::{GroupError, GroupId, Incoming, Outgoing, Removal};
+pub use history::{Content, EDITABLE_MESSAGES, Effect, HistoryEntry, Ignored};
 pub use identity::{
     AccountId, AccountKey, Device, DeviceCertificate, DeviceId, DeviceKey, IdentityError,
 };
@@ -22,6 +29,9 @@ pub use key_packages::{
 pub use messages::{
     Body, MAX_RECEIPT, MAX_TEXT, MESSAGE_VERSION, MIN_PADDED, MediaKey, MediaRef, Message,
     MessageError, MessageId, ReceiptKind,
+};
+pub use store::{
+    Changes, PartitionId, Record, RecordId, STORE_FORMAT, Store, StoreError, StoreKey,
 };
 pub use suite::{CIPHERSUITE_ID, CIPHERSUITE_NAME, CoreError, self_check};
 

@@ -19,6 +19,7 @@ use openmls_traits::OpenMlsProvider;
 use openmls_traits::storage::StorageProvider;
 use tls_codec::{Deserialize as _, Serialize as _};
 
+use crate::codec::{CodecError, Reader, Writer};
 use crate::identity::{Device, DeviceCertificate, IdentityError};
 use crate::suite::CIPHERSUITE;
 
@@ -150,6 +151,40 @@ impl KeyPackagePool {
             self.published.push(entry);
         }
         Ok(update)
+    }
+
+    /// Writes the pool into a record of the local database (story 02-06). The secrets of
+    /// the *KeyPackages* live in the OpenMLS state; this is only their bookkeeping.
+    pub(crate) fn write_to(&self, out: &mut Writer) -> Result<(), CodecError> {
+        out.u16(u16::try_from(self.published.len()).map_err(|_| CodecError::TooLong)?);
+        for entry in &self.published {
+            let reference = entry
+                .reference
+                .tls_serialize_detached()
+                .map_err(|_| CodecError::Malformed)?;
+            out.vec16(&reference)?;
+            out.u64(entry.not_after);
+            out.bool(entry.last_resort);
+            out.bool(entry.withdrawn);
+        }
+        Ok(())
+    }
+
+    /// Reads back a pool written by [`KeyPackagePool::write_to`].
+    pub(crate) fn read_from(input: &mut Reader<'_>) -> Result<Self, CodecError> {
+        let count = input.u16()?;
+        let published = (0..count)
+            .map(|_| {
+                Ok(Published {
+                    reference: KeyPackageRef::tls_deserialize_exact(input.vec16()?)
+                        .map_err(|_| CodecError::Malformed)?,
+                    not_after: input.u64()?,
+                    last_resort: input.bool()?,
+                    withdrawn: input.bool()?,
+                })
+            })
+            .collect::<Result<_, CodecError>>()?;
+        Ok(Self { published })
     }
 }
 

@@ -37,6 +37,8 @@ use openmls_rust_crypto::RustCrypto;
 use openmls_traits::random::OpenMlsRand;
 use zeroize::Zeroizing;
 
+use crate::codec::{CodecError, Reader, Writer};
+
 /// Version of the format written by this core.
 pub const MESSAGE_VERSION: u8 = 1;
 
@@ -169,9 +171,8 @@ pub enum ReceiptKind {
 /// A message's body.
 ///
 /// An edit or a deletion targets a message by its identifier; only the author of the
-/// targeted message can change it. This core does not keep the history yet: the check
-/// will be done with the local database (story 02-06), by comparing the senders of the
-/// two messages.
+/// targeted message can change it: the history (story 02-06) applies it only when both
+/// messages come from the same account.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Body {
     /// A text, possibly in reply to another message.
@@ -243,7 +244,7 @@ impl Message {
         out.u64(self.sent_at);
         match &self.body {
             Body::Text { text, reply_to } => {
-                out.optional_id(reply_to.as_ref());
+                write_optional_id(&mut out, reply_to.as_ref());
                 out.vec16(text.as_bytes())?;
             }
             Body::Media {
@@ -251,7 +252,7 @@ impl Message {
                 caption,
                 reply_to,
             } => {
-                out.optional_id(reply_to.as_ref());
+                write_optional_id(&mut out, reply_to.as_ref());
                 out.vec8(&media.blob)?;
                 out.bytes(media.key.as_bytes());
                 out.bytes(&media.digest);
@@ -293,15 +294,15 @@ impl Message {
         if !(KIND_TEXT..=KIND_DELETE).contains(&kind) {
             return Err(MessageError::UnknownKind(kind));
         }
-        let id = input.id()?;
+        let id = read_id(&mut input)?;
         let sent_at = input.u64()?;
         let body = match kind {
             KIND_TEXT => Body::Text {
-                reply_to: input.optional_id()?,
+                reply_to: read_optional_id(&mut input)?,
                 text: input.string16()?,
             },
             KIND_MEDIA => {
-                let reply_to = input.optional_id()?;
+                let reply_to = read_optional_id(&mut input)?;
                 let media = MediaRef {
                     blob: input.vec8()?.to_vec(),
                     key: MediaKey::from_bytes(input.array()?),
@@ -326,15 +327,17 @@ impl Message {
                 if count == 0 || count > MAX_RECEIPT {
                     return Err(MessageError::Malformed);
                 }
-                let messages = (0..count).map(|_| input.id()).collect::<Result<_, _>>()?;
+                let messages = (0..count)
+                    .map(|_| read_id(&mut input))
+                    .collect::<Result<_, _>>()?;
                 Body::Receipt { kind, messages }
             }
             KIND_EDIT => Body::Edit {
-                target: input.id()?,
+                target: read_id(&mut input)?,
                 text: input.string16()?,
             },
             _ => Body::Delete {
-                target: input.id()?,
+                target: read_id(&mut input)?,
             },
         };
 
@@ -399,7 +402,7 @@ pub(crate) fn padded_len(len: usize) -> usize {
 
 /// `Padmé`: rounds `len` by keeping only its `⌊log2 ⌊log2 len⌋⌋ + 1` most significant
 /// bits; the following bits are set to zero and the value is rounded up.
-fn padme(len: usize) -> usize {
+pub(crate) fn padme(len: usize) -> usize {
     if len < 2 {
         return len;
     }
@@ -409,112 +412,34 @@ fn padme(len: usize) -> usize {
     (len + mask) & !mask
 }
 
-struct Writer(Vec<u8>);
-
-impl Writer {
-    fn u8(&mut self, value: u8) {
-        self.0.push(value);
-    }
-
-    fn u16(&mut self, value: u16) {
-        self.0.extend_from_slice(&value.to_be_bytes());
-    }
-
-    fn u64(&mut self, value: u64) {
-        self.0.extend_from_slice(&value.to_be_bytes());
-    }
-
-    fn bytes(&mut self, bytes: &[u8]) {
-        self.0.extend_from_slice(bytes);
-    }
-
-    fn vec8(&mut self, bytes: &[u8]) -> Result<(), MessageError> {
-        let len = u8::try_from(bytes.len()).map_err(|_| MessageError::Invalid("field too long"))?;
-        self.u8(len);
-        self.bytes(bytes);
-        Ok(())
-    }
-
-    fn vec16(&mut self, bytes: &[u8]) -> Result<(), MessageError> {
-        let len =
-            u16::try_from(bytes.len()).map_err(|_| MessageError::Invalid("field too long"))?;
-        self.u16(len);
-        self.bytes(bytes);
-        Ok(())
-    }
-
-    fn optional_id(&mut self, id: Option<&MessageId>) {
-        match id {
-            None => self.u8(0),
-            Some(id) => {
-                self.u8(1);
-                self.bytes(&id.0);
-            }
+impl From<CodecError> for MessageError {
+    fn from(error: CodecError) -> Self {
+        match error {
+            CodecError::TooLong => Self::Invalid("field too long"),
+            CodecError::Malformed => Self::Malformed,
         }
     }
 }
 
-/// A reader that never reads beyond what remains.
-struct Reader<'a>(&'a [u8]);
-
-impl<'a> Reader<'a> {
-    fn take(&mut self, n: usize) -> Result<&'a [u8], MessageError> {
-        if n > self.0.len() {
-            return Err(MessageError::Malformed);
-        }
-        let (head, tail) = self.0.split_at(n);
-        self.0 = tail;
-        Ok(head)
-    }
-
-    fn array<const N: usize>(&mut self) -> Result<[u8; N], MessageError> {
-        self.take(N)?
-            .try_into()
-            .map_err(|_| MessageError::Malformed)
-    }
-
-    fn u8(&mut self) -> Result<u8, MessageError> {
-        self.array::<1>().map(|[b]| b)
-    }
-
-    fn u16(&mut self) -> Result<u16, MessageError> {
-        self.array().map(u16::from_be_bytes)
-    }
-
-    fn u64(&mut self) -> Result<u64, MessageError> {
-        self.array().map(u64::from_be_bytes)
-    }
-
-    fn id(&mut self) -> Result<MessageId, MessageError> {
-        self.array().map(MessageId)
-    }
-
-    fn optional_id(&mut self) -> Result<Option<MessageId>, MessageError> {
-        match self.u8()? {
-            0 => Ok(None),
-            1 => self.id().map(Some),
-            _ => Err(MessageError::Malformed),
+pub(crate) fn write_optional_id(out: &mut Writer, id: Option<&MessageId>) {
+    match id {
+        None => out.u8(0),
+        Some(id) => {
+            out.u8(1);
+            out.bytes(&id.0);
         }
     }
+}
 
-    fn vec8(&mut self) -> Result<&'a [u8], MessageError> {
-        let len = self.u8()?;
-        self.take(usize::from(len))
-    }
+pub(crate) fn read_id(input: &mut Reader<'_>) -> Result<MessageId, CodecError> {
+    input.array().map(MessageId)
+}
 
-    fn vec16(&mut self) -> Result<&'a [u8], MessageError> {
-        let len = self.u16()?;
-        self.take(usize::from(len))
-    }
-
-    fn string8(&mut self) -> Result<String, MessageError> {
-        let bytes = self.vec8()?;
-        String::from_utf8(bytes.to_vec()).map_err(|_| MessageError::Malformed)
-    }
-
-    fn string16(&mut self) -> Result<String, MessageError> {
-        let bytes = self.vec16()?;
-        String::from_utf8(bytes.to_vec()).map_err(|_| MessageError::Malformed)
+fn read_optional_id(input: &mut Reader<'_>) -> Result<Option<MessageId>, CodecError> {
+    match input.u8()? {
+        0 => Ok(None),
+        1 => read_id(input).map(Some),
+        _ => Err(CodecError::Malformed),
     }
 }
 

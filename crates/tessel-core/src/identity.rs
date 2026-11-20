@@ -10,8 +10,9 @@
 //! security codes (story 02-09); the caller compares `account_key` with the key it
 //! knows.
 //!
-//! Private keys never leave this module: no public type returns, serializes or
-//! displays them, and they are wiped from memory when dropped.
+//! Private keys never leave this module, except sealed into the local database (story
+//! 02-06): no public type returns, serializes or displays them, and they are wiped from
+//! memory when dropped.
 
 use std::fmt;
 use std::str::FromStr;
@@ -27,6 +28,8 @@ use tls_codec::{
     VLByteSlice,
 };
 use zeroize::Zeroizing;
+
+use crate::codec::{CodecError, Reader, Writer};
 
 /// Signature scheme of account and device keys: the one of suite 0x0001.
 const SCHEME: SignatureScheme = SignatureScheme::ED25519;
@@ -485,6 +488,30 @@ impl Device {
             credential: self.certificate.to_credential()?,
             signature_key: self.key.public_key().into(),
         })
+    }
+
+    /// Writes the device, private key included, into a record of the local database.
+    /// Only the store (story 02-06) calls this, and it seals the record before it leaves
+    /// the core.
+    pub(crate) fn write_to(&self, out: &mut Writer) -> Result<(), CodecError> {
+        out.vec8(&self.key.0.private)?;
+        out.vec8(&self.key.0.public)?;
+        let certificate = self
+            .certificate
+            .to_bytes()
+            .map_err(|_| CodecError::Malformed)?;
+        out.vec16(&certificate)
+    }
+
+    /// Reads back a device written by [`Device::write_to`], checking again that the
+    /// certificate is valid and certifies this key.
+    pub(crate) fn read_from(input: &mut Reader<'_>) -> Result<Self, CodecError> {
+        let private = Zeroizing::new(input.vec8()?.to_vec());
+        let public = input.vec8()?.to_vec();
+        let certificate =
+            DeviceCertificate::from_bytes(input.vec16()?).map_err(|_| CodecError::Malformed)?;
+        Self::new(DeviceKey(SigningKey { private, public }), certificate)
+            .map_err(|_| CodecError::Malformed)
     }
 }
 

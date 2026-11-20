@@ -224,6 +224,9 @@ importers:
       '@types/node':
         specifier: ^24.19.2
         version: 24.19.2
+      fake-indexeddb:
+        specifier: 6.2.5
+        version: 6.2.5
       typescript:
         specifier: ~6.0.3
         version: 6.0.3
@@ -819,6 +822,10 @@ packages:
     resolution: {integrity: sha512-HVQE3AAb/pxF8fQAoiqpvg9i3evqug3hoiwakOyZAwJm+6vZehbkYXZ0l4JxS+I3QxM97v5aaRNhj8v5oBhekw==}
     engines: {node: '>=0.10'}
 
+  fake-indexeddb@6.2.5:
+    resolution: {integrity: sha512-CGnyrvbhPlWYMngksqrSSUT1BAVP49dZocrHuK0SvtR0D5TMs5wP0o3j7jexDJW01KSadjBp1M/71o/KR3nD1w==}
+    engines: {node: '>=18'}
+
   fast-json-stable-stringify@2.1.0:
     resolution: {integrity: sha512-lhd/wF+Lk98HZoTCtlVraHtfh5XYijIjalXck7saUtuanSDyLMxnHhSXEDJqHxD7msR8D0uCmqlkwjCV8xvwHw==}
 
@@ -1292,6 +1299,8 @@ snapshots:
       supports-color: 8.1.1
 
   denque@2.1.0: {}
+
+  fake-indexeddb@6.2.5: {}
 
   fast-json-stable-stringify@2.1.0: {}
 

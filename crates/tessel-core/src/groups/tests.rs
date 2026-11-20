@@ -8,6 +8,7 @@ use super::*;
 use crate::identity::{AccountKey, DeviceKey};
 use crate::key_packages::verify_key_package;
 use crate::messages::{Body, MESSAGE_VERSION};
+use crate::store::StoreKey;
 
 fn now() -> u64 {
     std::time::SystemTime::now()
@@ -36,7 +37,11 @@ impl Account {
             .key
             .certify(&self.id, DeviceId::random().unwrap(), key.public_key())
             .unwrap();
-        Client::new(Device::new(key, certificate).unwrap())
+        Client::new(
+            Device::new(key, certificate).unwrap(),
+            &StoreKey::generate().unwrap(),
+        )
+        .unwrap()
     }
 }
 

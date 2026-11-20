@@ -6,6 +6,7 @@ use tls_codec::Serialize as _;
 use super::*;
 use crate::client::Client;
 use crate::identity::{AccountId, AccountKey};
+use crate::store::StoreKey;
 
 /// Verifying a *KeyPackage* reads the real clock: the tests start from now.
 fn now() -> u64 {
@@ -17,7 +18,11 @@ fn now() -> u64 {
 
 fn client() -> Client {
     let account = AccountId::parse("alice@tessel.example").unwrap();
-    Client::new(Device::create(&account, &AccountKey::generate().unwrap()).unwrap())
+    Client::new(
+        Device::create(&account, &AccountKey::generate().unwrap()).unwrap(),
+        &StoreKey::generate().unwrap(),
+    )
+    .unwrap()
 }
 
 fn consume(client: &Client, key_package: &VerifiedKeyPackage) {
