@@ -15,6 +15,7 @@ use crate::identity::{Device, DeviceCertificate};
 use crate::key_packages::{KeyPackageError, KeyPackagePool, KeyPackageUpdate};
 use crate::messages::{Message, MessageId};
 use crate::outbox::{OUTBOX, Outbox, SendId};
+use crate::safety::{Contacts, VERIFIED};
 use crate::store::{Changes, PartitionId, Record, Sealer, StoreError, StoreKey};
 
 /// Version of the client record.
@@ -53,6 +54,7 @@ pub struct Client {
     pub(crate) groups: HashMap<GroupId, Group>,
     pub(crate) history: History,
     pub(crate) outbox: Outbox,
+    pub(crate) contacts: Contacts,
     persisted: Persisted,
 }
 
@@ -69,6 +71,7 @@ impl Client {
             groups: HashMap::new(),
             history: History::default(),
             outbox: Outbox::default(),
+            contacts: Contacts::default(),
             persisted: Persisted {
                 state: key.state_partition()?,
                 sealer,
@@ -89,6 +92,7 @@ impl Client {
         let mut mls = HashMap::new();
         let mut history = History::default();
         let mut outbox = Outbox::default();
+        let mut contacts = Contacts::default();
 
         for record in state {
             if record.partition != partition {
@@ -106,6 +110,7 @@ impl Client {
                 }
                 RECENT => history.load(&opened.body)?,
                 OUTBOX => outbox.load(&opened.body)?,
+                VERIFIED => contacts.load(&opened.body)?,
                 _ => return Err(StoreError::Malformed),
             }
         }
@@ -143,6 +148,7 @@ impl Client {
             groups,
             history,
             outbox,
+            contacts,
             persisted: Persisted {
                 sealer,
                 state: partition,
@@ -214,6 +220,7 @@ impl Client {
 
         changes.append(self.history.take());
         changes.append(self.outbox.take());
+        changes.append(self.contacts.take());
         if client_changed {
             *client = record;
         }
@@ -283,6 +290,12 @@ impl Client {
     ) -> Result<SendId, StoreError> {
         let Persisted { sealer, state, .. } = &self.persisted;
         self.outbox.push(sealer, *state, group, message)
+    }
+
+    /// The verified contacts, with what they need to seal their records.
+    pub(crate) fn contacts_mut(&mut self) -> (&mut Contacts, &Sealer, PartitionId) {
+        let Persisted { sealer, state, .. } = &self.persisted;
+        (&mut self.contacts, sealer, *state)
     }
 
     /// Removes an acknowledged message from the group's send queue.

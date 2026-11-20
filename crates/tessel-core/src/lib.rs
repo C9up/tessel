@@ -13,6 +13,7 @@ mod key_packages;
 mod media;
 mod messages;
 mod outbox;
+mod safety;
 pub mod store;
 mod suite;
 #[cfg(test)]
@@ -37,6 +38,7 @@ pub use messages::{
     MessageError, MessageId, ReceiptKind,
 };
 pub use outbox::{Outbound, SendId};
+pub use safety::{SAFETY_NUMBER_DIGITS, SAFETY_QR_VERSION, SafetyError, SafetyNumber, Trust};
 pub use store::{
     Changes, PartitionId, Record, RecordId, STORE_FORMAT, Store, StoreError, StoreKey,
 };
