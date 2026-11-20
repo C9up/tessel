@@ -1,0 +1,95 @@
+# Story 01-06: every push and pull request runs the same checks as `pnpm check` on a
+# developer's machine, against the same stack (scripts/stack.sh), plus a scan of the
+# whole history for leaked secrets.
+#
+# Actions are pinned to a commit, not a tag: a tag can be moved, a commit cannot.
+name: check
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  secrets:
+    name: No secret in the history
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      GITLEAKS_VERSION: 8.30.1
+      # From gitleaks_8.30.1_checksums.txt, published with the release.
+      GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Install gitleaks
+        run: |
+          archive="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          curl -fsSL -o "$RUNNER_TEMP/$archive" \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/$archive"
+          echo "$GITLEAKS_SHA256  $RUNNER_TEMP/$archive" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/$archive" -C "$RUNNER_TEMP" gitleaks
+      - name: Scan every commit
+        run: '"$RUNNER_TEMP/gitleaks" git --redact --no-banner --verbose .'
+
+  check:
+    name: pnpm check
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Node and pnpm, at the versions package.json declares.
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: pnpm
+
+      # Rust: rustup installs the toolchain, components and targets of
+      # rust-toolchain.toml on the first cargo call.
+      - name: Rust toolchain
+        run: rustup toolchain install
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      - uses: taiki-e/install-action@75a7c0f87bd666af3cdb75c5b9e9d03ab6044e6f # v2.90.6
+        with:
+          tool: cargo-deny,cargo-audit,wasm-bindgen-cli@0.2.129
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # The same stack as on a developer's machine: PostgreSQL over mutual TLS
+      # (scripts/stack.sh) and KeyDB (compose.yaml).
+      - name: Start the stack
+        run: |
+          pipx install podman-compose
+          cp apps/server/.env.example apps/server/.env
+          pnpm --filter @tessel/server exec ream generate:key
+          pnpm infra
+          for _ in $(seq 1 60); do
+            podman exec tessel-keydb keydb-cli ping >/dev/null 2>&1 && break
+            sleep 1
+          done
+          podman exec tessel-keydb keydb-cli ping
+          pnpm --filter @tessel/server migrate
+
+      # The WASM core the web package tests load.
+      - name: Build the web core
+        run: pnpm --filter @tessel/core-web build
+
+      - name: pnpm check
+        run: pnpm check
+
+      - name: Stop the stack
+        if: always()
+        run: pnpm infra:down || true
