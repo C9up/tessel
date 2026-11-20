@@ -3,8 +3,12 @@
 //! Tout ce qui touche aux clés et au chiffrement vit ici, une seule fois, pour le
 //! web (WASM) comme pour le mobile (natif). Aucune clé privée ne sort de ce crate.
 
+mod identity;
 mod suite;
 
+pub use identity::{
+    AccountId, AccountKey, Device, DeviceCertificate, DeviceId, DeviceKey, IdentityError,
+};
 pub use suite::{CIPHERSUITE_ID, CIPHERSUITE_NAME, CoreError, self_check};
 
 /// Version du cœur, telle que publiée par Cargo.

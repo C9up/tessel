@@ -1754,6 +1754,8 @@ dependencies = [
  "openmls_rust_crypto",
  "openmls_traits",
  "thiserror",
+ "tls_codec",
+ "zeroize",
 ]
 
 [[package]]

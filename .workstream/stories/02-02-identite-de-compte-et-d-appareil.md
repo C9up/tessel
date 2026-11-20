@@ -4,7 +4,7 @@ title: "Identité de compte et d'appareil"
 description: "Chaque appareil a sa clé, liée au compte `pseudo@domaine` par une signature vérifiable."
 tags: [product]
 status: draft
-state: todo
+state: review
 parent: epics/02-tessel-core-le-coeur-cryptographique.md
 depends_on: [stories/02-01-integrer-openmls-et-la-suite-cryptographique.md]
 priority: high
