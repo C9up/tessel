@@ -4,7 +4,7 @@ title: "File d'envoi hors ligne"
 description: "Un message écrit sans réseau part tout seul au retour de la connexion, une seule fois, dans l'ordre."
 tags: [product]
 status: draft
-state: todo
+state: review
 parent: epics/02-tessel-core-le-coeur-cryptographique.md
 depends_on: [stories/02-05-messages-applicatifs.md, stories/02-06-base-locale-chiffree.md]
 priority: high

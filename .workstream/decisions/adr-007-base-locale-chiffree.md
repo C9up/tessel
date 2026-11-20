@@ -55,7 +55,8 @@ Aucune nouvelle dépendance cryptographique n'est ajoutée.
   - la réserve de *KeyPackages* ;
   - les groupes, avec les intentions de commit en attente ;
   - les entrées d'OpenMLS ;
-  - l'index des messages récents.
+  - l'index des messages récents ;
+  - la file d'envoi (02-07), un enregistrement par message en attente.
 - **Une partition d'historique par groupe**, lue à la demande par `read_history`.
 
 ### 4. La clé de la base
