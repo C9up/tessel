@@ -5,9 +5,23 @@
 # Actions are pinned to a commit, not a tag: a tag can be moved, a commit cannot.
 name: check
 
+# Kept lean: main and pull requests only (no second run for a branch push), and
+# never for a change that only touches the Workstream documents or prose.
 on:
   push:
+    branches: [main]
+    paths-ignore:
+      - ".workstream/**"
+      - "**/*.md"
+      - ".claude/**"
+      - ".agents/**"
   pull_request:
+    paths-ignore:
+      - ".workstream/**"
+      - "**/*.md"
+      - ".claude/**"
+      - ".agents/**"
+  workflow_dispatch:
 
 permissions:
   contents: read
