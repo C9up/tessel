@@ -18,7 +18,7 @@ Mettre Tessel en ligne sur les VPS du propriétaire.
 ## Critères d'acceptation
 
 - Images conteneur du serveur et du web, déployées par Outpost (Podman rootless).
-- Postgres (derrière BlackGate), KeyDB, stockage S3 et TLS en place.
+- Postgres en TLS mutuel, sur un disque chiffré (ADR-006), KeyDB, stockage S3 et TLS en place.
 - Déploiement reproductible, décrit dans le dépôt.
 
 ## Reviews

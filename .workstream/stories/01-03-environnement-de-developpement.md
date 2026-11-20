@@ -17,7 +17,7 @@ Tout ce qu'il faut pour lancer Tessel en local d'une seule commande.
 
 ## Critères d'acceptation
 
-- Compose de développement : Postgres servi à travers BlackGate (l'app ne connaît que l'URL de connexion), KeyDB, stockage compatible S3.
+- Compose de développement : Postgres en TLS mutuel (`scripts/stack.sh`, sans BlackGate depuis l'ADR-006), KeyDB, stockage compatible S3.
 - Ports choisis libres par rapport aux autres apps Ream de la machine, et notés dans le README.
 - `.env.example` complet, sans secret réel.
 - `pnpm dev` lance le serveur et le web ; l'app Expo se lance à part sur émulateur.

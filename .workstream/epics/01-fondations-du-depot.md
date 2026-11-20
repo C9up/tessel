@@ -16,7 +16,7 @@ Le dépôt, les apps vides et les outils qui permettent à toutes les autres epi
 
 - Dépôt git et monorepo pnpm + turbo : `apps/server` (Ream, qui sert aussi l'interface aurora / nebula), `crates/tessel-core` (Rust), `packages/protocol` (contrat `comet` partagé).
 - Serveur Ream sur le modèle `nadeo` : modules hexagonaux, test d'architecture, outbox, bus d'événements.
-- Environnement de développement : Postgres (derrière BlackGate), KeyDB, stockage compatible S3.
+- Environnement de développement : Postgres en TLS mutuel (ADR-006), KeyDB, stockage compatible S3.
 - Contrôles automatiques (lint, types, tests TS et Rust, audit des dépendances).
 - Décisions d'architecture de départ dans `.workstream/decisions/`.
 

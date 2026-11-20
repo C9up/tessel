@@ -19,7 +19,7 @@ Le serveur est un facteur aveugle (vision, principe 1) bâti sur le modèle nade
 | Module | Rôle | Ce qu'il sait | Ce qu'il ne sait jamais |
 |---|---|---|---|
 | `system` | Sonde de vie, informations d'instance | Rien de personnel | — |
-| `shared` | Événements du domaine, outbox, briques communes | Le type et la charge des événements, le temps qu'ils transitent (chiffrés par BlackGate) | Le contenu d'un message |
+| `shared` | Événements du domaine, outbox, briques communes | Le type et la charge des événements, le temps qu'ils transitent (identifiants opaques seulement, ADR-006) | Le contenu d'un message |
 | `identity` | Comptes `pseudo@domaine`, appareils, *KeyPackages*, sessions, contacts par lien ou QR, numéro facultatif | Pseudo, clés publiques, appareils, dernière activité au jour près, numéro pseudonymisé (OPRF) | Nom affiché, avatar (chiffrés de bout en bout), carnet d'adresses |
 | `delivery` | Boîtes aux lettres, ordre des commits, accusés de remise, purge | En-tête public MLS (groupe, epoch, type), destinataires d'une enveloppe, tailles | Le texte, l'expéditeur réel une fois l'expéditeur scellé (epic 18) |
 | `spaces` | Espaces, salons, rôles, permissions, invitations | Identifiants, appartenances, permissions (pour les appliquer) | Noms d'espaces, de salons et de rôles maison (chiffrés de bout en bout) |
@@ -34,5 +34,5 @@ Après la v1 : `calls` (signalisation WebRTC, epic 16) et `federation` (epic 20)
 
 - Un module ne lit que ses tables (table `OWNER` du test d'architecture, tenue à jour à chaque migration).
 - Les modules se parlent par événements (outbox) ou par des ports que fournit le module propriétaire de la donnée.
-- Une colonne nouvelle est chiffrée par BlackGate, sauf si une raison de `clear-columns.yaml` s'applique (clé, ordre de file, valeur que la base compare).
+- Une colonne nouvelle ne garde que du chiffré de bout en bout, un identifiant opaque, ou ce que la base doit comparer ou trier ; elle s'inscrit au registre des métadonnées avec sa raison (story 15-02, ADR-006, qui remplace la règle BlackGate du 20.11.2026).
 - Un journal ou une métrique ne contient ni contenu, ni couple expéditeur–destinataire (story 14-02).

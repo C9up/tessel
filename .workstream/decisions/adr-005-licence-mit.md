@@ -28,7 +28,7 @@ Conséquence assumée : n'importe qui peut reprendre le code, y compris dans un 
 | wasm-bindgen | MIT / Apache-2.0 | Oui |
 | Paquets `@c9up/*` utilisés (ream, atlas, blackhole, chronos, quasar, spectrum, helix) | MIT | Oui |
 | `@c9up/ream-cli` | Aucune déclarée | Outil de développement, non distribué ; à signaler à ream-cli |
-| BlackGate | Aucune déclarée (ni `Cargo.toml`, ni `LICENSE`) | Service séparé, non lié au code de Tessel ; à clarifier avant d'en livrer une image avec Tessel (story 14-04) |
+| BlackGate | Aucune déclarée : produit propriétaire | **Retiré** de Tessel le 20.11.2026 (ADR-006) |
 | PostgreSQL / KeyDB | PostgreSQL / BSD-3-Clause | Oui (services séparés) |
 | libsignal | AGPL-3.0 | **Écarté** (ADR-001) |
 
