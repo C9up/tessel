@@ -1,0 +1,14 @@
+# Ce qui reste en clair, et pourquoi. Chaque colonne de chaque table est soit chiffrée
+# (columns.yaml), soit listée ici sous sa raison. C'est le début du registre des
+# métadonnées (story 15-02), qui ajoutera le test refusant toute autre colonne.
+
+# Un identifiant que la base génère ou compare : un chiffré ne correspondrait à rien.
+key:
+  - outbox.id
+
+# Une valeur que la base trie, compare ou calcule (horloge, compteur, état d'une file).
+# Elle dit quand et combien, rien de ce qui est dit.
+queue:
+  - outbox.created_at
+  - outbox.available_at
+  - outbox.attempts

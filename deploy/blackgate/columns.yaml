@@ -1,0 +1,22 @@
+# Les colonnes que BlackGate chiffre : ce que la base ne doit jamais garder en clair.
+# Déclarées avant la migration qui les crée, puis BlackGate relit sa configuration
+# (scripts/stack.sh reload). La colonne reste `text` en base : elle porte le chiffré.
+#
+# Aléatoire (deterministic: false) tant que l'application ne cherche pas une valeur
+# par égalité.
+#
+# Le contenu des conversations n'est pas ici : il arrive déjà chiffré de bout en bout,
+# le serveur ne l'a jamais. BlackGate protège ce que le serveur sait (métadonnées).
+
+# Le type d'un événement : ce qui s'est passé, sans dire à qui.
+"outbox.event_type":
+  algorithm: "AES-256-GCM"
+  deterministic: false
+# Ce qui s'est passé : un événement nomme des comptes, des appareils, des groupes.
+"outbox.payload":
+  algorithm: "AES-256-GCM"
+  deterministic: false
+# Un message d'erreur peut citer une valeur.
+"outbox.last_error":
+  algorithm: "AES-256-GCM"
+  deterministic: false

@@ -11,6 +11,9 @@ coverage/
 # Réglages locaux des agents
 .claude/settings.local.json
 
+# Pile de développement (certificats, mots de passe) : scripts/stack.sh
+.stack/
+
 # Secrets locaux
 .env
 .env.*

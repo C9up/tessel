@@ -1,0 +1,20 @@
+# Infrastructure de développement de Tessel, hors base de données.
+# Postgres et BlackGate sont lancés par scripts/stack.sh (TLS mutuel, comme en production).
+# KeyDB : garde de l'outbox, limitation de débit, diffusion entre instances.
+services:
+  keydb:
+    image: docker.io/eqalpha/keydb:latest
+    container_name: tessel-keydb
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${REDIS_PORT:-6460}:6379"
+    volumes:
+      - keydbdata:/data
+    healthcheck:
+      test: ["CMD", "keydb-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  keydbdata:
