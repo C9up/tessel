@@ -4,8 +4,9 @@ members = ["crates/*"]
 
 [workspace.package]
 edition = "2024"
-rust-version = "1.90"
+rust-version = "1.97"
 publish = false
+license = "MIT"
 
 [workspace.lints.rust]
 unsafe_code = "deny"

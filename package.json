@@ -9,10 +9,10 @@
   "scripts": {
     "dev": "turbo run dev",
     "build": "turbo run build",
-    "test": "turbo run test && cargo test --workspace",
-    "lint": "biome check . && turbo run lint && cargo clippy --workspace --all-targets -- -D warnings",
+    "test": "turbo run test && scripts/cargo.sh test --workspace",
+    "lint": "biome check . && turbo run lint && scripts/cargo.sh clippy --workspace --all-targets -- -D warnings && scripts/cargo.sh fmt --all --check",
     "typecheck": "turbo run typecheck",
-    "check": "pnpm lint && pnpm typecheck && pnpm test && cargo deny check && cargo audit",
+    "check": "pnpm lint && pnpm typecheck && pnpm test && scripts/cargo.sh deny check && scripts/cargo.sh audit",
     "format": "biome check --write .",
     "infra": "scripts/stack.sh start && podman-compose up -d",
     "infra:down": "podman-compose down; scripts/stack.sh stop",
@@ -21,5 +21,6 @@
   "devDependencies": {
     "@biomejs/biome": "2.6.8",
     "turbo": "^2.11.13"
-  }
+  },
+  "license": "MIT"
 }

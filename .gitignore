@@ -32,3 +32,7 @@ expo-env.d.ts
 # Sorties générées du cœur Rust (liaisons WASM et natives)
 packages/*/pkg/
 packages/*/generated/
+apps/*/modules/*/android/build/
+apps/*/modules/*/android/.cxx/
+apps/*/modules/*/android/src/main/jniLibs/
+apps/*/modules/*/android/src/main/java/uniffi/

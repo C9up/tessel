@@ -1,0 +1,20 @@
+{
+  "name": "@tessel/core-web",
+  "version": "0.1.0",
+  "private": true,
+  "description": "tessel-core pour le navigateur : le module WASM et son chargeur.",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "../../scripts/build-wasm.sh",
+    "test": "node --test 'src/**/*.test.ts'",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^24.19.2",
+    "typescript": "~6.0.3"
+  },
+  "license": "MIT"
+}

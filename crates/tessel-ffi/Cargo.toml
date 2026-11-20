@@ -1,0 +1,23 @@
+[package]
+name = "tessel-ffi"
+version = "0.1.0"
+description = "Liaisons natives de tessel-core (uniffi) pour l'app mobile : Kotlin sur Android, Swift sur iOS."
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+license.workspace = true
+
+[lib]
+# cdylib : la bibliothèque chargée par Android (JNA) ; staticlib : iOS.
+# Les liaisons sont générées par crates/uniffi-bindgen, qui lit les métadonnées de la .so.
+crate-type = ["cdylib", "staticlib", "lib"]
+name = "tessel_ffi"
+
+[dependencies]
+tessel-core = { path = "../tessel-core" }
+uniffi = "0.32.2"
+
+# Pas de `[lints] workspace = true` : les macros d'uniffi engendrent du code `unsafe`
+# (l'interface C). Le reste des règles s'applique.
+[lints.clippy]
+all = { level = "deny", priority = -1 }

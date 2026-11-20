@@ -1,0 +1,7 @@
+# Une seule chaîne Rust pour tout le monde (web, Android, CI). Passer par rustup :
+# `scripts/cargo.sh` le fait même quand ~/.cargo/bin n'est pas dans le PATH.
+[toolchain]
+channel = "1.97.0"
+components = ["clippy", "rustfmt"]
+targets = ["wasm32-unknown-unknown", "aarch64-linux-android", "x86_64-linux-android"]
+profile = "minimal"

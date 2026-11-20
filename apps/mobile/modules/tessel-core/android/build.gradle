@@ -1,0 +1,28 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'app.tessel.core'
+version = '0.1.0'
+
+android {
+  namespace "app.tessel.core"
+  defaultConfig {
+    versionCode 1
+    versionName "0.1.0"
+    // Les règles R8 de JNA et d'uniffi suivent le module dans l'app qui l'utilise.
+    consumerProguardFiles 'proguard-rules.pro'
+  }
+  lintOptions {
+    abortOnError false
+  }
+}
+
+dependencies {
+  // Les liaisons Kotlin d'uniffi chargent libtessel_ffi.so par JNA.
+  implementation "net.java.dev.jna:jna:5.17.0@aar"
+}
+
+// libtessel_ffi.so (src/main/jniLibs) et les liaisons Kotlin (src/main/java/uniffi) sont
+// produites par scripts/build-android-core.sh, jamais écrites à la main.
