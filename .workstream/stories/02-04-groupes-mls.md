@@ -18,6 +18,7 @@ Créer un groupe, ajouter et retirer des membres et des appareils, traiter les c
 ## Critères d'acceptation
 
 - Créer, ajouter (membres et appareils), retirer, quitter ; traiter *Commit* et *Welcome*.
+- Un *Welcome* ou un groupe d'une autre suite que 0x0001 est refusé (ADR-001).
 - Un commit refusé par le serveur (epoch dépassée) est rejoué sur l'état à jour, sans perte.
 - Test à 3 comptes × 2 appareils : chacun lit tous les messages après ajouts et retraits ; un appareil retiré ne lit plus rien.
 

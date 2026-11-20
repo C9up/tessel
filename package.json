@@ -12,7 +12,7 @@
     "test": "turbo run test && scripts/cargo.sh test --workspace",
     "lint": "biome check . && turbo run lint && scripts/cargo.sh clippy --workspace --all-targets -- -D warnings && scripts/cargo.sh fmt --all --check",
     "typecheck": "turbo run typecheck",
-    "check": "pnpm lint && pnpm typecheck && pnpm test && scripts/cargo.sh deny check && scripts/cargo.sh audit",
+    "check": "pnpm lint && pnpm typecheck && pnpm test && scripts/check-targets.sh && scripts/cargo.sh deny check && scripts/cargo.sh audit",
     "format": "biome check --write .",
     "infra": "scripts/stack.sh start && podman-compose up -d",
     "infra:down": "podman-compose down; scripts/stack.sh stop",

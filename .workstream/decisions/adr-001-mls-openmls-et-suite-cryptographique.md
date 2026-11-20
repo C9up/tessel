@@ -34,6 +34,23 @@ La vision fixe trois exigences : pas de cryptographie maison (principe 3), un vr
 - La story 02-01 vérifie la compilation sur les trois cibles et `cargo deny` sur l'arbre d'OpenMLS.
 - Chaque montée de version d'OpenMLS est une story, avec les vecteurs de test MLS officiels (02-12).
 - La taille maximale d'un espace dépendra du coût mesuré des commits (étude 10-01).
+- Intégration (story 02-01, 20.11.2026) : `openmls =0.9.2`, `openmls_rust_crypto =0.6.0`,
+  `openmls_traits =0.6.0`. Le cœur expose `self_check()` (suite prise en charge, aléa
+  disponible), appelé au chargement du cœur web. `scripts/check-targets.sh` (dans `pnpm check`)
+  vérifie le WASM et les deux cibles Android ; l'arbre ne contient aucun code C.
+- Sur `wasm32-unknown-unknown`, la fonctionnalité `js` d'OpenMLS ne suffit pas : `rand_core`
+  0.6 (RustCrypto, via hpke-rs) tire encore `getrandom` 0.2, que `tessel-core` déclare avec sa
+  fonctionnalité `js` sur cette seule cible.
+- `openmls_libcrux_crypto` n'est pas utilisable aujourd'hui : sa dernière version (0.3.1) suit
+  `openmls_traits` 0.5, OpenMLS 0.9.2 la 0.6.
+- Avis RustSec acceptés en connaissance de cause (justifiés dans `deny.toml`, à revoir à chaque
+  montée d'OpenMLS) :
+  - `crypto-bigint` 0.5 (RUSTSEC-2026-0387) : temps non constant, mais seulement sur les
+    courbes NIST, que la suite 0x0001 n'utilise pas ;
+  - `proc-macro-error2` (RUSTSEC-2026-0173) : macro de compilation seulement ;
+  - `libcrux-kem` 0.0.9 (RUSTSEC-2026-0330/0331) : présent dans le verrou, jamais compilé.
+- Les stories 02-03 et 02-04 refusent tout *KeyPackage* ou *Welcome* d'une autre suite que
+  0x0001 : c'est ce qui garde les courbes NIST hors du chemin des secrets.
 
 ## Sources
 

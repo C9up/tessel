@@ -6,6 +6,18 @@ all-features = true
 # Tout avis RustSec fait échouer, y compris « non maintenu » : on décide en connaissance de cause.
 version = 2
 yanked = "deny"
+# Chaque exception dit pourquoi elle ne touche pas Tessel ; à revoir à chaque montée
+# d'OpenMLS (ADR-001). Même liste dans .cargo/audit.toml.
+ignore = [
+  # crypto-bigint 0.5 (temps non constant) : seulement via elliptic-curve, pour les
+  # courbes NIST (P-256, P-384, k256). La suite 0x0001 n'utilise que X25519, Ed25519 et
+  # AES-GCM (curve25519-dalek) ; le cœur ne crée aucune clé NIST. Correctif en 0.7.6,
+  # hors de portée tant que openmls_rust_crypto reste sur elliptic-curve 0.13.
+  { id = "RUSTSEC-2026-0387", reason = "NIST curves only; Tessel's suite 0x0001 never handles secrets on them" },
+  # proc-macro-error2 non maintenu : macro de compilation de hax-lib (libcrux-sha3,
+  # via hpke-rs), sans code à l'exécution.
+  { id = "RUSTSEC-2026-0173", reason = "build-time proc macro only, no runtime code" },
+]
 
 [licenses]
 version = 2
