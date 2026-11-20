@@ -1,29 +1,29 @@
 import { createRpcClient, type RpcTransport } from '@c9up/comet'
 
 /**
- * Contrat client-serveur de Tessel : les méthodes `comet` (JSON-RPC 2.0), leurs
- * paramètres et la validation de leurs résultats, déclarés une seule fois et
- * importés par le serveur, le web et le mobile.
+ * Tessel's client-server contract: the `comet` methods (JSON-RPC 2.0), their
+ * parameters and the validation of their results, declared once and imported by the
+ * server, the web and mobile.
  *
- * Rien de ce qui passe ici n'est un contenu de conversation en clair : le serveur
- * ne reçoit que des enveloppes chiffrées par `tessel-core`.
+ * Nothing that passes through here is conversation content in clear: the server
+ * only receives envelopes encrypted by `tessel-core`.
  */
 
-/** Version du protocole. Elle monte quand un client ancien ne peut plus parler au serveur. */
+/** Protocol version. It goes up when an old client can no longer talk to the server. */
 export const PROTOCOL_VERSION = 1
 
-/** Les noms des méthodes, `<module>.<verbe>`. */
+/** The method names, `<module>.<verb>`. */
 export const Method = {
   ping: 'system.ping',
 } as const
 
-/** Réponse de `system.ping` : le serveur est là, et dit quel protocole il parle. */
+/** Response of `system.ping`: the server is there, and says which protocol it speaks. */
 export interface Pong {
   readonly pong: true
   readonly protocol: number
 }
 
-/** Un résultat que le client ne peut pas accepter. */
+/** A result the client cannot accept. */
 export class ProtocolError extends Error {
   readonly code: 'E_PROTOCOL_BAD_RESULT'
   readonly method: string
@@ -43,7 +43,7 @@ export function parsePong(data: unknown): Pong {
   throw new ProtocolError('E_PROTOCOL_BAD_RESULT', Method.ping)
 }
 
-/** Ce qu'un client (web ou mobile) peut demander au serveur. */
+/** What a client (web or mobile) can ask of the server. */
 export interface TesselClient {
   ping(signal?: AbortSignal): Promise<Pong>
 }
@@ -56,8 +56,8 @@ export function createTesselClient(transport: RpcTransport, url = '/rpc'): Tesse
 }
 
 /**
- * Le transport par `fetch`, pour le navigateur et React Native : POST JSON vers
- * `baseUrl` + chemin, réponse vide pour un 204 (notification).
+ * The `fetch` transport, for the browser and React Native: JSON POST to
+ * `baseUrl` + path, empty response for a 204 (notification).
  */
 export function fetchTransport(baseUrl: string, fetchImpl: typeof fetch = fetch): RpcTransport {
   return async (url, body, { signal }) => {

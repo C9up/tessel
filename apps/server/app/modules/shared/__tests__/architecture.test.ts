@@ -5,17 +5,17 @@ import { describe, expect, test } from '@c9up/helix'
 import ts from 'typescript'
 
 /**
- * La règle hexagonale, reprise de nadeo (décision « le métier au centre ») : chaque
- * module a quatre couches, et chaque couche n'importe que ce qu'elle peut.
+ * The hexagonal rule, taken from nadeo (the "business at the centre" decision): each
+ * module has four layers, and each layer imports only what it may.
  *
- *   domain/          son domaine, shared/domain, @c9up/atom, @c9up/chronos
- *   application/     son domaine et son application, shared/domain, l'injection du
- *                    framework, les événements et ports d'un autre module
- *   infrastructure/  tout sauf son application et son http
- *   http/            tout sauf son infrastructure et l'ORM
+ *   domain/          its domain, shared/domain, @c9up/atom, @c9up/chronos
+ *   application/     its domain and application, shared/domain, the framework's
+ *                    injection, another module's events and ports
+ *   infrastructure/  everything except its application and its http
+ *   http/            everything except its infrastructure and the ORM
  *
- * `start/` compose : il n'ouvre jamais un dépôt, n'exécute aucun SQL, ne définit aucun
- * point RPC et ne décide rien. Un module ne lit que ses propres tables.
+ * `start/` composes: it never opens a repository, runs no SQL, defines no RPC point
+ * and decides nothing. A module reads only its own tables.
  */
 
 const ROOT = fileURLToPath(new URL('../../../../', import.meta.url))
@@ -65,7 +65,7 @@ function breach(module: string, layer: Layer, to: ReturnType<typeof target>, spe
   return null
 }
 
-/** Qui possède chaque table : le module dont les migrations la créent. Une table nouvelle s'inscrit ici. */
+/** Who owns each table: the module whose migrations create it. A new table is registered here. */
 const OWNER: Record<string, readonly string[]> = {
   shared: ['outbox'],
 }

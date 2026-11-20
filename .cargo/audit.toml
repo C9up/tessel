@@ -1,11 +1,11 @@
-# cargo audit lit Cargo.lock, qui garde aussi les dépendances facultatives jamais
-# compilées ; cargo deny, lui, suit le vrai graphe. Les justifications sont dans deny.toml.
+# cargo audit reads Cargo.lock, which also keeps optional dependencies that are never
+# compiled; cargo deny follows the real graph. The justifications are in deny.toml.
 [advisories]
 ignore = [
-  "RUSTSEC-2026-0387", # crypto-bigint : courbes NIST, hors de la suite 0x0001
-  "RUSTSEC-2026-0173", # proc-macro-error2 : macro de compilation seulement
-  # libcrux-kem 0.0.9 : tiré par hpke-rs-libcrux, dépendance facultative de hpke-rs
-  # que rien n'active (absente de `cargo tree`), donc jamais compilée.
+  "RUSTSEC-2026-0387", # crypto-bigint: NIST curves, outside suite 0x0001
+  "RUSTSEC-2026-0173", # proc-macro-error2: build-time macro only
+  # libcrux-kem 0.0.9: pulled in by hpke-rs-libcrux, an optional dependency of hpke-rs
+  # that nothing enables (absent from `cargo tree`), so never compiled.
   "RUSTSEC-2026-0330",
   "RUSTSEC-2026-0331",
 ]

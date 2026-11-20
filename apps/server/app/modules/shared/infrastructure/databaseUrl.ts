@@ -1,4 +1,4 @@
-/** Où est la base, et les fichiers qui authentifient les deux bouts de la session TLS (repris de Klinivia). */
+/** Where the database is, and the files that authenticate both ends of the TLS session (taken from Klinivia). */
 export interface DatabaseTarget {
   readonly host: string
   readonly port: number

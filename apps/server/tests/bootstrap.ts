@@ -40,8 +40,8 @@ export const runnerHooks: { setup: RunnerHook[]; teardown: RunnerHook[] } = {
 }
 
 /**
- * Une seule suite, `app` : les tests vivent à côté de leur module (`__tests__/`).
- * Le serveur HTTP ne démarre qu'une fois pour la suite.
+ * A single suite, `app`: tests live next to their module (`__tests__/`).
+ * The HTTP server starts only once for the suite.
  */
 export const configureSuite: ConfigureOptions['configureSuite'] = (suite) => {
   if (suite.name === 'app') {

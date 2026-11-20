@@ -1,6 +1,5 @@
-// Les points RPC des modules, enregistrés sur le routeur partagé. Chaque module
-// déclare les siens dans sa couche http (`http/*Methods.ts`) ; `start/` ne fait
-// que les enregistrer.
+// The modules' RPC points, registered on the shared router. Each module declares
+// its own in its http layer (`http/*Methods.ts`); `start/` only registers them.
 import type { RpcRouter } from '@c9up/ream/rpc/router'
 import app from '@c9up/ream/services/app'
 import { registerSystemMethods } from '#modules/system/http/systemMethods.js'

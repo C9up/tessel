@@ -1,14 +1,14 @@
 import { Migration } from '@c9up/atlas'
 
-/** Le rôle sous lequel l'application tourne. Il ne possède rien. */
+/** The role the application runs as. It owns nothing. */
 const APP_ROLE = 'app'
 
 /**
- * Ce que le rôle de l'application peut faire (repris de Klinivia). Les migrations
- * tournent sous le propriétaire du schéma ; l'application tourne sous `app`.
+ * What the application's role may do (taken from Klinivia). Migrations run as the
+ * schema owner; the application runs as `app`.
  *
- * Toute table que le propriétaire crée à partir d'ici est lisible et modifiable par
- * `app`. Une table qui doit en refuser davantage le reprend dans sa propre migration.
+ * Every table the owner creates from here on is readable and writable by `app`. A
+ * table that must refuse more takes it back in its own migration.
  */
 export default class GrantApplicationRole extends Migration {
   async up() {

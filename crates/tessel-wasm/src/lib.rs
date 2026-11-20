@@ -1,24 +1,24 @@
-//! Liaisons WASM de `tessel-core` pour le client web.
+//! WASM bindings of `tessel-core` for the web client.
 //!
-//! Une couche mince : chaque fonction exportée appelle le cœur et ne décide rien.
-//! Aucune clé privée ne traverse cette frontière.
+//! A thin layer: every exported function calls the core and decides nothing. No
+//! private key crosses this boundary.
 
 use wasm_bindgen::prelude::{JsError, wasm_bindgen};
 
-/// Version du cœur.
+/// Core version.
 #[wasm_bindgen]
 pub fn version() -> String {
     tessel_core::version().to_owned()
 }
 
-/// Nom IANA de la suite MLS de Tessel.
+/// IANA name of Tessel's MLS suite.
 #[wasm_bindgen]
 pub fn ciphersuite() -> String {
     tessel_core::CIPHERSUITE_NAME.to_owned()
 }
 
-/// Vérifie que le cœur peut travailler dans ce navigateur (suite prise en charge,
-/// aléa disponible). Lève une erreur sinon.
+/// Checks that the core can work in this browser (suite supported, randomness
+/// available). Throws an error otherwise.
 #[wasm_bindgen(js_name = selfCheck)]
 pub fn self_check() -> Result<(), JsError> {
     tessel_core::self_check().map_err(|e| JsError::new(&e.to_string()))

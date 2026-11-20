@@ -8,7 +8,7 @@ export default class AppProvider extends Provider {
   async start() {}
   async ready() {}
 
-  /** Arrêter le relais et l'écriture dans l'outbox. Leur démarrage vit dans `bin/server.ts`. */
+  /** Stop the relay and the writing into the outbox. Their startup lives in `bin/server.ts`. */
   async shutdown() {
     setOutboxActive(false)
     outboxRelay.stop()

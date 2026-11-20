@@ -4,18 +4,18 @@ import { type DomainEvent, setEventPublisher } from '#modules/shared/domain/even
 import { enqueueOutbox, type OutboxRow } from '#modules/shared/infrastructure/outbox.js'
 import { redis } from '#modules/shared/infrastructure/redis.js'
 
-// Tout événement du domaine est publié ici : le `emit()` du domaine le remet.
+// Every domain event is published here: the domain's `emit()` hands it over.
 setEventPublisher(async (event) => {
   await enqueueForDurability(event)
   await emitter.dispatchEvent(event)
 })
 
 /**
- * Garde « au plus une fois » par `(abonné, événement)`, en trois temps pour qu'une
- * livraison ÉCHOUÉE reste rejouable (repris de nadeo, bug-899) :
- * - `claim` prend un bail court ; `false` si un pair le tient ou si c'est déjà fait ;
- * - `commit` le change en fenêtre de déduplication, seulement après un succès ;
- * - `release` le rend quand l'écouteur lève, pour que la reprise puisse tourner.
+ * "At most once" guard per `(subscriber, event)`, in three steps so that a FAILED
+ * delivery stays replayable (taken from nadeo, bug-899):
+ * - `claim` takes a short lease; `false` if a peer holds it or it is already done;
+ * - `commit` turns it into a deduplication window, only after a success;
+ * - `release` gives it back when the listener throws, so that the retry can run.
  */
 export interface ProcessedGuard {
   claim(key: string): Promise<boolean>
@@ -23,14 +23,14 @@ export interface ProcessedGuard {
   release(key: string): Promise<void>
 }
 
-/** Bail d'une livraison en cours, bien au-dessus de la durée réelle d'un écouteur. */
+/** Lease of a delivery in progress, well above a listener's real duration. */
 const LEASE_SEC = 5 * 60
-/** Fenêtre pendant laquelle une redélivrance du même événement est ignorée. */
+/** Window during which a redelivery of the same event is ignored. */
 const DEDUP_SEC = 24 * 60 * 60
 
 /**
- * Garde par défaut, sur KeyDB. OUVERTE en cas de panne : si KeyDB ne répond pas, on
- * journalise et l'écouteur tourne quand même (un effet de bord ne se perd pas en silence).
+ * Default guard, on KeyDB. OPEN on failure: if KeyDB does not answer, we log it
+ * and the listener runs anyway (a side effect is not lost silently).
  */
 export const redisGuard: ProcessedGuard = {
   async claim(key) {
@@ -58,8 +58,8 @@ export const redisGuard: ProcessedGuard = {
 }
 
 /**
- * L'écouteur idempotent d'un événement : `name` est l'identité de l'abonné et préfixe la
- * clé de déduplication, pour que deux abonnés d'un même événement tournent chacun une fois.
+ * The idempotent listener of an event: `name` is the subscriber's identity and prefixes
+ * the deduplication key, so that two subscribers of the same event each run once.
  */
 export function makeListener<E extends DomainEvent>(
   name: string,
@@ -80,9 +80,9 @@ export function makeListener<E extends DomainEvent>(
 }
 
 /**
- * Abonner un écouteur à une classe d'événement, sur l'émetteur du cœur (chemin rapide)
- * ET au registre de l'outbox (redélivrance), avec le même écouteur des deux côtés.
- * Le câblage entre modules vit dans `start/events.ts`, nulle part ailleurs.
+ * Subscribe a listener to an event class, on the core emitter (fast path) AND in the
+ * outbox registry (redelivery), with the same listener on both sides.
+ * The wiring between modules lives in `start/events.ts`, nowhere else.
  */
 export function onDomainEvent<E extends DomainEvent>(
   event: new (...args: never[]) => E,
@@ -95,30 +95,30 @@ export function onDomainEvent<E extends DomainEvent>(
   registerOutboxSubscriber(event.name, listener)
 }
 
-/** Les abonnés par type d'événement (nom de classe), que le relais de l'outbox rejoue. */
+/** The subscribers by event type (class name), which the outbox relay replays. */
 const outboxSubscribers = new Map<string, Array<(event: DomainEvent) => Promise<void>>>()
 
-/** Inscrire un abonné à la redélivrance, sans passer par l'émetteur (testable seul). */
+/** Register a subscriber for redelivery, without going through the emitter (testable on its own). */
 export function registerOutboxSubscriber<E extends DomainEvent>(eventName: string, listener: (event: E) => Promise<void>): void {
   const list = outboxSubscribers.get(eventName) ?? []
-  // Seule variance assumée : un écouteur de `E` n'est jamais appelé qu'avec un `E`.
+  // The only variance we accept: a listener of `E` is only ever called with an `E`.
   list.push(listener as (event: DomainEvent) => Promise<void>)
   outboxSubscribers.set(eventName, list)
 }
 
-/** Délai laissé au chemin rapide avant que le relais ne prenne la ligne. */
+/** Time left to the fast path before the relay takes the row. */
 const OUTBOX_GRACE_SEC = 30
 
 /**
- * L'outbox n'écrit que quand le relais tourne : `bin/server.ts` l'active, le harnais de
- * test ne passe jamais par là. Écrire sans relais n'empilerait que des lignes mortes.
+ * The outbox writes only while the relay runs: `bin/server.ts` turns it on, the test
+ * harness never goes through there. Writing without a relay would only pile up dead rows.
  */
 let outboxActive = false
 export function setOutboxActive(active: boolean): void {
   outboxActive = active
 }
 
-/** Garder l'événement pour le relais. OUVERT : un échec est journalisé, l'émission continue. */
+/** Keep the event for the relay. OPEN: a failure is logged, emission carries on. */
 async function enqueueForDurability(event: DomainEvent): Promise<void> {
   try {
     if (!outboxActive) return
@@ -136,8 +136,8 @@ async function enqueueForDurability(event: DomainEvent): Promise<void> {
 }
 
 /**
- * Redélivrer une ligne réservée à TOUS ses abonnés (le garde saute ceux qui ont abouti).
- * `ok` si aucun n'a levé ; un type sans abonné est `ok` pour que sa ligne soit nettoyée.
+ * Redeliver a claimed row to ALL its subscribers (the guard skips those that succeeded).
+ * `ok` if none threw; a type with no subscriber is `ok` so that its row gets cleaned up.
  */
 export async function deliverOutboxRow(row: OutboxRow): Promise<{ ok: boolean; error?: string }> {
   const subs = outboxSubscribers.get(row.event_type) ?? []

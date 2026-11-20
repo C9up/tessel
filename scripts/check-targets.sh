@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Vérifie que le cœur compile sur les cibles de Tessel : WASM (web) et Android
-# (mobile), en plus du natif que `cargo test` couvre déjà (ADR-001, ADR-003).
+# Checks that the core compiles for Tessel's targets: WASM (web) and Android
+# (mobile), on top of native, which `cargo test` already covers (ADR-001, ADR-003).
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"

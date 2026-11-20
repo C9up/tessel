@@ -4,14 +4,14 @@ import { deliverOutboxRow, makeListener, type ProcessedGuard, registerOutboxSubs
 import type { OutboxDb, OutboxEntry, OutboxRow } from '#modules/shared/infrastructure/outbox.js'
 import { OutboxRelay } from '#modules/shared/infrastructure/outboxRelay.js'
 
-/** Un événement d'exemple, propre à ce test. */
+/** A sample event, specific to this test. */
 class SampleHappened extends DomainEvent {
   constructor(readonly note: string) {
     super()
   }
 }
 
-/** Une outbox en mémoire : les mêmes gestes que les fonctions SQL, sans base. */
+/** An in-memory outbox: the same operations as the SQL functions, without a database. */
 function memoryOutbox() {
   const rows = new Map<string, OutboxRow & { due: boolean; lastError?: string }>()
   const db = {} as OutboxDb
@@ -47,7 +47,7 @@ function memoryOutbox() {
   }
 }
 
-/** Un garde en mémoire, à la place de KeyDB. */
+/** An in-memory guard, in place of KeyDB. */
 function memoryGuard(): ProcessedGuard {
   const keys = new Map<string, string>()
   return {

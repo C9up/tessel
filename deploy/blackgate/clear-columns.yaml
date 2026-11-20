@@ -1,13 +1,13 @@
-# Ce qui reste en clair, et pourquoi. Chaque colonne de chaque table est soit chiffrée
-# (columns.yaml), soit listée ici sous sa raison. C'est le début du registre des
-# métadonnées (story 15-02), qui ajoutera le test refusant toute autre colonne.
+# What stays in clear, and why. Every column of every table is either encrypted
+# (columns.yaml) or listed here under its reason. This is the start of the metadata
+# register (story 15-02), which will add the test refusing any other column.
 
-# Un identifiant que la base génère ou compare : un chiffré ne correspondrait à rien.
+# An identifier the database generates or compares: a ciphertext would match nothing.
 key:
   - outbox.id
 
-# Une valeur que la base trie, compare ou calcule (horloge, compteur, état d'une file).
-# Elle dit quand et combien, rien de ce qui est dit.
+# A value the database sorts, compares or computes (clock, counter, state of a queue).
+# It says when and how many, nothing of what is said.
 queue:
   - outbox.created_at
   - outbox.available_at

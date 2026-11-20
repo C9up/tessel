@@ -1,18 +1,19 @@
-//! Groupes MLS (story 02-04).
+//! MLS groups (story 02-04).
 //!
-//! Un groupe réunit des appareils, pas des comptes : ajouter quelqu'un, c'est ajouter
-//! chacun de ses appareils ; un compte en a plusieurs. Chaque feuille qui entre ou
-//! change doit porter un certificat d'appareil valide (story 02-02), sinon le commit
-//! ou le *Welcome* est refusé.
+//! A group brings together devices, not accounts: adding someone means adding each of
+//! their devices; an account has several. Every leaf that joins or changes must carry
+//! a valid device certificate (story 02-02), otherwise the commit or the *Welcome* is
+//! rejected.
 //!
-//! Le serveur ordonne les commits (story 04-02) : un seul gagne par epoch. Un commit
-//! se prépare ([`Client::add_devices`], [`Client::remove_devices`]…), part au serveur,
-//! puis le client apprend s'il est accepté ([`Client::commit_accepted`]) ou refusé
-//! ([`Client::commit_rejected`]). Refusé, le client traite les commits qui l'ont
-//! devancé, puis [`Client::retry_commit`] rejoue la même intention sur l'état à jour.
+//! The server orders commits (story 04-02): only one wins per epoch. A commit is
+//! prepared ([`Client::add_devices`], [`Client::remove_devices`]…), sent to the
+//! server, then the client learns whether it was accepted ([`Client::commit_accepted`])
+//! or rejected ([`Client::commit_rejected`]). When rejected, the client processes the
+//! commits that beat it, then [`Client::retry_commit`] replays the same intent on the
+//! up-to-date state.
 //!
-//! Tout part chiffré (`PrivateMessage`), commits compris : le serveur ne voit que
-//! l'identifiant du groupe, l'epoch et le type de message.
+//! Everything is sent encrypted (`PrivateMessage`), commits included: the server only
+//! sees the group identifier, the epoch and the message type.
 
 use std::fmt;
 
@@ -31,42 +32,42 @@ use crate::key_packages::{VerifiedKeyPackage, capabilities};
 use crate::messages::{Message, MessageError};
 use crate::suite::CIPHERSUITE;
 
-/// Nombre d'epochs passées dont on garde les clés, pour lire un message chiffré juste
-/// avant un commit et arrivé juste après. Au-delà, le secret est effacé (confidentialité
-/// persistante).
+/// Number of past epochs whose keys are kept, to read a message encrypted just before a
+/// commit and arriving just after it. Beyond that, the secret is erased (forward
+/// secrecy).
 const MAX_PAST_EPOCHS: usize = 3;
 
-/// Ce que les groupes peuvent refuser.
+/// What groups can reject.
 #[derive(Debug, thiserror::Error, PartialEq, Eq)]
 pub enum GroupError {
-    /// Ce groupe n'existe pas sur cet appareil (ou l'appareil en a été retiré).
+    /// This group does not exist on this device (or the device was removed from it).
     #[error("unknown group")]
     UnknownGroup,
-    /// Le message n'est pas un message MLS attendu ici.
+    /// The message is not an MLS message expected here.
     #[error("malformed or unexpected MLS message")]
     Malformed,
-    /// Le *Welcome* ou le groupe n'est pas dans la suite de Tessel (ADR-001).
+    /// The *Welcome* or the group is not in Tessel's ciphersuite (ADR-001).
     #[error("group uses another ciphersuite")]
     WrongCiphersuite,
-    /// Un commit de cet appareil attend déjà la réponse du serveur.
+    /// A commit from this device is already awaiting the server's answer.
     #[error("a commit is already pending")]
     PendingCommit,
-    /// Aucun commit en attente.
+    /// No pending commit.
     #[error("no pending commit")]
     NoPendingCommit,
-    /// Un message de cet appareil-ci, renvoyé par le serveur.
+    /// A message from this very device, sent back by the server.
     #[error("own message")]
     OwnMessage,
-    /// L'opération ne change rien au groupe.
+    /// The operation changes nothing in the group.
     #[error("nothing to commit")]
     NothingToCommit,
-    /// OpenMLS a refusé l'opération ou le message.
+    /// OpenMLS rejected the operation or the message.
     #[error("MLS: {0}")]
     Mls(String),
-    /// Une feuille ne porte pas un certificat d'appareil valide.
+    /// A leaf does not carry a valid device certificate.
     #[error(transparent)]
     Identity(#[from] IdentityError),
-    /// Le message à envoyer viole le format (story 02-05).
+    /// The message to send violates the format (story 02-05).
     #[error(transparent)]
     Message(#[from] MessageError),
 }
@@ -75,17 +76,17 @@ fn mls(error: impl fmt::Display) -> GroupError {
     GroupError::Mls(error.to_string())
 }
 
-/// L'identifiant d'un groupe : aléatoire, sans rien dire de son contenu.
+/// A group's identifier: random, revealing nothing about its contents.
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub struct GroupId(Vec<u8>);
 
 impl GroupId {
-    /// Reprend un identifiant connu.
+    /// Wraps a known identifier.
     pub fn from_bytes(bytes: &[u8]) -> Self {
         Self(bytes.to_vec())
     }
 
-    /// Les octets de l'identifiant.
+    /// The identifier's bytes.
     pub fn as_bytes(&self) -> &[u8] {
         &self.0
     }
@@ -103,12 +104,12 @@ impl fmt::Debug for GroupId {
     }
 }
 
-/// Qui retirer d'un groupe.
+/// Whom to remove from a group.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Removal {
-    /// Tous les appareils d'un compte.
+    /// All the devices of an account.
     Account(AccountId),
-    /// Un appareil d'un compte.
+    /// One device of an account.
     Device(AccountId, DeviceId),
 }
 
@@ -123,8 +124,8 @@ impl Removal {
     }
 }
 
-/// Une intention de commit, gardée jusqu'à ce que le serveur l'accepte, pour la
-/// rejouer si un autre commit l'a devancée.
+/// A commit intent, kept until the server accepts it, so it can be replayed if another
+/// commit beat it.
 #[derive(Debug, Clone)]
 enum Operation {
     Add(Vec<VerifiedKeyPackage>),
@@ -132,52 +133,52 @@ enum Operation {
     CommitProposals,
 }
 
-/// Un commit à envoyer au serveur, et le *Welcome* des appareils ajoutés.
+/// A commit to send to the server, and the *Welcome* for the added devices.
 #[derive(Debug, PartialEq, Eq)]
 pub struct Outgoing {
-    /// Le commit (`MLSMessage`), pour les membres actuels.
+    /// The commit (`MLSMessage`), for the current members.
     pub commit: Vec<u8>,
-    /// Le *Welcome* (`MLSMessage`), pour les appareils ajoutés.
+    /// The *Welcome* (`MLSMessage`), for the added devices.
     pub welcome: Option<Vec<u8>>,
 }
 
-/// Ce qu'un message reçu a produit.
+/// What a received message produced.
 #[derive(Debug, PartialEq, Eq)]
 pub enum Incoming {
-    /// Un message d'un membre (story 02-05). L'expéditeur est authentifié même quand le
-    /// message est illisible : l'appli peut dire « message de X, illisible » ou « mettez
-    /// Tessel à jour » plutôt que de le taire.
+    /// A message from a member (story 02-05). The sender is authenticated even when the
+    /// message is unreadable: the app can say "message from X, unreadable" or "update
+    /// Tessel" rather than silently dropping it.
     Message {
-        /// Le groupe.
+        /// The group.
         group: GroupId,
-        /// L'appareil qui l'a envoyé.
+        /// The device that sent it.
         sender: DeviceCertificate,
-        /// Le message, ou pourquoi il ne se lit pas.
+        /// The message, or why it cannot be read.
         message: Result<Message, MessageError>,
     },
-    /// Une proposition (un membre qui part), gardée jusqu'au prochain commit.
+    /// A proposal (a member leaving), kept until the next commit.
     Proposal {
-        /// Le groupe.
+        /// The group.
         group: GroupId,
-        /// L'appareil qui l'a envoyée.
+        /// The device that sent it.
         sender: DeviceCertificate,
     },
-    /// Un commit appliqué : le groupe passe à l'epoch suivante.
+    /// An applied commit: the group moves to the next epoch.
     Commit {
-        /// Le groupe.
+        /// The group.
         group: GroupId,
-        /// L'appareil qui l'a fait.
+        /// The device that made it.
         sender: DeviceCertificate,
-        /// Les appareils ajoutés.
+        /// The devices that were added.
         added: Vec<DeviceCertificate>,
-        /// Les appareils retirés.
+        /// The devices that were removed.
         removed: Vec<DeviceCertificate>,
-        /// Cet appareil-ci a été retiré : le groupe est effacé de l'appareil.
+        /// This very device was removed: the group is erased from the device.
         removed_self: bool,
     },
 }
 
-/// L'état d'un groupe sur l'appareil.
+/// A group's state on the device.
 #[derive(Debug)]
 pub(crate) struct Group {
     mls: MlsGroup,
@@ -220,8 +221,8 @@ fn sender_certificate(group: &MlsGroup, sender: &Sender) -> Result<DeviceCertifi
     }
 }
 
-/// Vérifie chaque feuille qu'un commit fait entrer ou change, et rend les appareils
-/// ajoutés et retirés (lus dans l'état d'avant le commit).
+/// Checks every leaf that a commit adds or changes, and returns the added and removed
+/// devices (read from the state before the commit).
 fn summarize(
     group: &MlsGroup,
     commit: &StagedCommit,
@@ -257,8 +258,8 @@ fn serialize(message: MlsMessageOut) -> Result<Vec<u8>, GroupError> {
 }
 
 impl Group {
-    /// Prépare le commit d'une intention sur l'état actuel du groupe. `None` quand
-    /// l'intention n'a plus d'objet (les appareils sont déjà là, ou déjà partis).
+    /// Prepares the commit for an intent on the group's current state. `None` when the
+    /// intent no longer has a purpose (the devices are already there, or already gone).
     fn stage(
         &mut self,
         provider: &OpenMlsRustCrypto,
@@ -339,7 +340,7 @@ impl Client {
             .ok_or(GroupError::NothingToCommit)
     }
 
-    /// Crée un groupe dont cet appareil est le seul membre.
+    /// Creates a group of which this device is the only member.
     pub fn create_group(&mut self) -> Result<GroupId, GroupError> {
         let mls = MlsGroup::new(
             &self.provider,
@@ -353,8 +354,9 @@ impl Client {
         Ok(id)
     }
 
-    /// Prépare l'ajout d'appareils (ceux d'un nouveau membre, ou un nouvel appareil d'un
-    /// membre), par leurs *KeyPackages* vérifiés. Les appareils déjà présents sont ignorés.
+    /// Prepares the addition of devices (those of a new member, or a new device of an
+    /// existing member), through their verified *KeyPackages*. Devices already present
+    /// are ignored.
     pub fn add_devices(
         &mut self,
         group: &GroupId,
@@ -363,8 +365,8 @@ impl Client {
         self.commit(group, Operation::Add(key_packages.to_vec()))
     }
 
-    /// Prépare le retrait d'appareils ou de comptes entiers. Cet appareil-ci n'est
-    /// jamais retiré ainsi : il part avec [`Client::leave_group`].
+    /// Prepares the removal of devices or of whole accounts. This very device is never
+    /// removed this way: it leaves with [`Client::leave_group`].
     pub fn remove_devices(
         &mut self,
         group: &GroupId,
@@ -373,12 +375,12 @@ impl Client {
         self.commit(group, Operation::Remove(removals.to_vec()))
     }
 
-    /// Prépare le commit des propositions reçues (un membre qui part).
+    /// Prepares the commit of the received proposals (a member leaving).
     pub fn commit_pending_proposals(&mut self, group: &GroupId) -> Result<Outgoing, GroupError> {
         self.commit(group, Operation::CommitProposals)
     }
 
-    /// Le serveur a accepté le commit : le groupe passe à l'epoch suivante.
+    /// The server accepted the commit: the group moves to the next epoch.
     pub fn commit_accepted(&mut self, group: &GroupId) -> Result<(), GroupError> {
         let provider = &self.provider;
         let state = self.groups.get_mut(group).ok_or(GroupError::UnknownGroup)?;
@@ -390,9 +392,9 @@ impl Client {
         Ok(())
     }
 
-    /// Le serveur a refusé le commit (un autre l'a devancé dans cette epoch). Le
-    /// commit est abandonné, l'intention gardée : traiter les commits qui l'ont
-    /// devancé, puis [`Client::retry_commit`].
+    /// The server rejected the commit (another one beat it in this epoch). The commit
+    /// is dropped, the intent kept: process the commits that beat it, then
+    /// [`Client::retry_commit`].
     pub fn commit_rejected(&mut self, group: &GroupId) -> Result<(), GroupError> {
         let provider = &self.provider;
         let state = self.groups.get_mut(group).ok_or(GroupError::UnknownGroup)?;
@@ -405,8 +407,9 @@ impl Client {
             .map_err(mls)
     }
 
-    /// Rejoue l'intention d'un commit refusé sur l'état à jour. `None` quand elle n'a
-    /// plus d'objet (les commits reçus entre-temps l'ont déjà accomplie).
+    /// Replays the intent of a rejected commit on the up-to-date state. `None` when it
+    /// no longer has a purpose (the commits received in the meantime already fulfilled
+    /// it).
     pub fn retry_commit(&mut self, group: &GroupId) -> Result<Option<Outgoing>, GroupError> {
         let (provider, device) = (&self.provider, &self.device);
         let state = self.groups.get_mut(group).ok_or(GroupError::UnknownGroup)?;
@@ -416,23 +419,23 @@ impl Client {
         state.stage(provider, device, operation)
     }
 
-    /// Quitter un groupe : rend une proposition à envoyer aux membres. Un autre membre
-    /// la fait entrer par un commit ; cet appareil est retiré en le traitant.
+    /// Leaves a group: returns a proposal to send to the members. Another member
+    /// includes it through a commit; this device is removed when processing that commit.
     pub fn leave_group(&mut self, group: &GroupId) -> Result<Vec<u8>, GroupError> {
         let (provider, device) = (&self.provider, &self.device);
         let state = self.groups.get_mut(group).ok_or(GroupError::UnknownGroup)?;
         serialize(state.mls.leave_group(provider, device).map_err(mls)?)
     }
 
-    /// Rejoint un groupe par le *Welcome* reçu. Refuse une autre suite que celle de
-    /// Tessel, et un groupe dont un membre ne porte pas de certificat valide.
+    /// Joins a group through the received *Welcome*. Rejects any ciphersuite other than
+    /// Tessel's, and any group in which a member does not carry a valid certificate.
     pub fn join_group(&mut self, welcome: &[u8]) -> Result<GroupId, GroupError> {
         let message =
             MlsMessageIn::tls_deserialize_exact(welcome).map_err(|_| GroupError::Malformed)?;
         let MlsMessageBodyIn::Welcome(welcome) = message.extract() else {
             return Err(GroupError::Malformed);
         };
-        // Avant de toucher aux secrets : une autre suite n'entre pas (ADR-001).
+        // Before touching any secret: another ciphersuite does not get in (ADR-001).
         if welcome.ciphersuite() != CIPHERSUITE {
             return Err(GroupError::WrongCiphersuite);
         }
@@ -447,7 +450,7 @@ impl Client {
         Ok(id)
     }
 
-    /// Chiffre un message pour le groupe, remplissage compris (story 02-05).
+    /// Encrypts a message for the group, padding included (story 02-05).
     pub fn send_message(
         &mut self,
         group: &GroupId,
@@ -456,8 +459,8 @@ impl Client {
         self.encrypt(group, &message.encode()?)
     }
 
-    /// Chiffre des octets pour le groupe. Tout passe par [`Client::send_message`], qui
-    /// garantit le format et le remplissage ; les octets bruts ne servent qu'aux tests.
+    /// Encrypts bytes for the group. Everything goes through [`Client::send_message`],
+    /// which guarantees the format and the padding; raw bytes are only for tests.
     pub(crate) fn encrypt(&mut self, group: &GroupId, data: &[u8]) -> Result<Vec<u8>, GroupError> {
         let (provider, device) = (&self.provider, &self.device);
         let state = self.groups.get_mut(group).ok_or(GroupError::UnknownGroup)?;
@@ -469,7 +472,7 @@ impl Client {
         )
     }
 
-    /// Traite un message reçu d'un groupe : données, proposition ou commit.
+    /// Processes a message received from a group: data, proposal or commit.
     pub fn process(&mut self, message: &[u8]) -> Result<Incoming, GroupError> {
         let message =
             MlsMessageIn::tls_deserialize_exact(message).map_err(|_| GroupError::Malformed)?;
@@ -499,8 +502,8 @@ impl Client {
             ProcessedMessageContent::StagedCommitMessage(commit) => {
                 let (added, removed) = summarize(&state.mls, &commit)?;
                 let removed_self = commit.self_removed();
-                // Un commit d'un autre a gagné cette epoch : le nôtre, s'il y en avait
-                // un, est caduc ; son intention reste pour `retry_commit`.
+                // Another member's commit won this epoch: ours, if there was one, is
+                // void; its intent stays for `retry_commit`.
                 if state.mls.pending_commit().is_some() {
                     state
                         .mls
@@ -522,9 +525,9 @@ impl Client {
                     removed_self,
                 })
             }
-            // Notre propre commit renvoyé par le serveur : il l'a accepté. (Seulement en
-            // `PublicMessage` ; chiffré, son auteur ne peut pas le relire et l'acceptation
-            // passe par `commit_accepted`.)
+            // Our own commit sent back by the server: it accepted it. (Only as a
+            // `PublicMessage`; when encrypted, its author cannot read it back and the
+            // acceptance goes through `commit_accepted`.)
             ProcessedMessageContent::OwnPendingCommit => {
                 let commit = state
                     .mls
@@ -545,19 +548,19 @@ impl Client {
         }
     }
 
-    /// Les appareils membres du groupe.
+    /// The devices that are members of the group.
     pub fn members(&self, group: &GroupId) -> Result<Vec<DeviceCertificate>, GroupError> {
         let state = self.groups.get(group).ok_or(GroupError::UnknownGroup)?;
         state.mls.members().map(|m| certificate_of(&m)).collect()
     }
 
-    /// L'epoch actuelle du groupe.
+    /// The group's current epoch.
     pub fn epoch(&self, group: &GroupId) -> Result<u64, GroupError> {
         let state = self.groups.get(group).ok_or(GroupError::UnknownGroup)?;
         Ok(state.mls.epoch().as_u64())
     }
 
-    /// Efface un groupe de l'appareil, état MLS compris.
+    /// Erases a group from the device, MLS state included.
     fn forget(&mut self, group: &GroupId) -> Result<(), GroupError> {
         if let Some(mut state) = self.groups.remove(group) {
             state.mls.delete(self.provider.storage()).map_err(mls)?;

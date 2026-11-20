@@ -1,4 +1,4 @@
-// Le câblage des événements entre modules vit ici, et seulement ici : un module publie
-// ses événements, `start/` relie un événement à un écouteur déjà écrit (`onDomainEvent`).
-// Importer l'infrastructure des événements branche aussi le publieur du domaine.
+// The wiring of events between modules lives here, and only here: a module publishes
+// its events, `start/` ties an event to a listener already written (`onDomainEvent`).
+// Importing the events infrastructure also plugs in the domain's publisher.
 import '#modules/shared/infrastructure/events.js'

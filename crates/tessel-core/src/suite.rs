@@ -1,4 +1,4 @@
-//! La suite cryptographique de Tessel et le fournisseur qui l'implémente (ADR-001).
+//! Tessel's cryptographic suite and the provider that implements it (ADR-001).
 
 use openmls::prelude::Ciphersuite;
 use openmls_rust_crypto::OpenMlsRustCrypto;
@@ -6,34 +6,34 @@ use openmls_traits::OpenMlsProvider;
 use openmls_traits::crypto::OpenMlsCrypto;
 use openmls_traits::random::OpenMlsRand;
 
-/// `MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519`, la suite obligatoire de RFC 9420.
+/// `MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519`, the mandatory suite of RFC 9420.
 pub(crate) const CIPHERSUITE: Ciphersuite =
     Ciphersuite::MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519;
 
-/// Identifiant IANA de la suite (RFC 9420, §17.1).
+/// IANA identifier of the suite (RFC 9420, §17.1).
 pub const CIPHERSUITE_ID: u16 = 0x0001;
 
-/// Nom IANA de la suite.
+/// IANA name of the suite.
 pub const CIPHERSUITE_NAME: &str = "MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519";
 
-/// Ce que le cœur peut refuser.
+/// What the core can reject.
 #[derive(Debug, thiserror::Error, PartialEq, Eq)]
 pub enum CoreError {
-    /// Le fournisseur crypto ne prend pas en charge la suite de Tessel.
+    /// The crypto provider does not support Tessel's suite.
     #[error("the crypto provider does not support {CIPHERSUITE_NAME}")]
     UnsupportedCiphersuite,
-    /// L'hôte ne fournit pas d'aléa (dans le navigateur : `crypto.getRandomValues`).
+    /// The host provides no randomness (in the browser: `crypto.getRandomValues`).
     #[error("no randomness available on this host")]
     NoRandomness,
 }
 
-/// Le fournisseur de Tessel : primitives RustCrypto, en Rust pur, sur toutes les cibles.
+/// Tessel's provider: RustCrypto primitives, in pure Rust, on every target.
 pub(crate) fn provider() -> OpenMlsRustCrypto {
     OpenMlsRustCrypto::default()
 }
 
-/// Vérifie, sur l'hôte courant, que le cœur peut travailler : la suite est prise en
-/// charge et l'aléa est disponible. À appeler une fois au chargement du cœur.
+/// Checks, on the current host, that the core can work: the suite is supported and
+/// randomness is available. To call once when the core loads.
 pub fn self_check() -> Result<(), CoreError> {
     let provider = provider();
     provider

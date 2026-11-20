@@ -1,23 +1,22 @@
 #!/usr/bin/env bash
 # =============================================================================
-# Pile de développement : PostgreSQL derrière BlackGate, comme en production
-# (repris de Klinivia).
+# Development stack: PostgreSQL behind BlackGate, as in production
+# (taken from Klinivia).
 #
-#   scripts/stack.sh start   # certificats, PostgreSQL (podman), BlackGate (hôte)
-#   scripts/stack.sh stop    # arrête les deux et efface .stack/
-#   scripts/stack.sh reload  # BlackGate relit columns.yaml (SIGHUP), données gardées
+#   scripts/stack.sh start   # certificates, PostgreSQL (podman), BlackGate (host)
+#   scripts/stack.sh stop    # stops both and erases .stack/
+#   scripts/stack.sh reload  # BlackGate rereads columns.yaml (SIGHUP), data kept
 #
-# Tessel n'atteint PostgreSQL qu'à travers BlackGate, en TLS mutuel : pas de
-# raccourci en clair, en développement non plus. `start` écrit les lignes DB_*
-# dans apps/server/.env (mots de passe neufs à chaque démarrage) ; les ports
-# sont fixes.
+# Tessel reaches PostgreSQL only through BlackGate, over mutual TLS: no plaintext
+# shortcut, not even in development. `start` writes the DB_* lines into
+# apps/server/.env (fresh passwords on every start); the ports are fixed.
 #
-# Deux rôles : `tessel_owner` possède le schéma et joue les migrations
-# (scripts/migrate.sh) ; `app`, sous lequel l'application tourne, ne possède
-# rien et reçoit ses droits des migrations.
+# Two roles: `tessel_owner` owns the schema and runs the migrations
+# (scripts/migrate.sh); `app`, which the application runs as, owns nothing and
+# gets its rights from the migrations.
 #
-# Prérequis : podman, python3, openssl, et les binaires de BlackGate
-# (BLACKGATE_BIN et BLACKGATE_CLI ; par défaut la build release du dépôt blackgate).
+# Prerequisites: podman, python3, openssl, and the BlackGate binaries
+# (BLACKGATE_BIN and BLACKGATE_CLI; by default the release build of the blackgate repository).
 # =============================================================================
 set -euo pipefail
 
@@ -38,12 +37,12 @@ stop() {
     python3 -I -c 'import shutil, sys; shutil.rmtree(sys.argv[1], ignore_errors=True)' "$WORK"
 }
 
-wait_port() { # wait_port <port> <quoi> <journal>
+wait_port() { # wait_port <port> <what> <log>
     for _ in $(seq 1 100); do
         if (exec 3<>"/dev/tcp/127.0.0.1/$1") 2>/dev/null; then return 0; fi
         sleep 0.1
     done
-    echo "$2 n'a pas démarré sur le port $1" >&2
+    echo "$2 did not start on port $1" >&2
     if [ -f "$3" ]; then tail -40 "$3" >&2; fi
     return 1
 }
@@ -52,8 +51,8 @@ fingerprint() {
     python3 -I -c 'import json,sys; print(json.load(open(sys.argv[1]))["clients"][0]["fingerprint"])' "$WORK/certs.json"
 }
 
-# La configuration de BlackGate, avec les colonnes de deploy/blackgate/columns.yaml.
-write_config() { # write_config <empreinte du client>
+# BlackGate's configuration, with the columns of deploy/blackgate/columns.yaml.
+write_config() { # write_config <client fingerprint>
     local columns
     columns="$(grep -v '^\s*#' "$ROOT/deploy/blackgate/columns.yaml" | grep -v '^\s*$' | sed 's/^/    /')"
     cat > "$WORK/blackgate.yaml" <<YAML
@@ -88,7 +87,7 @@ sandbox:
 tenants:
   $SITE:
     cert_fingerprint: "$1"
-    # Le propriétaire passe par le même client en développement seulement.
+    # The owner goes through the same client in development only.
     allowed_db_users: ["app", "tessel_owner"]
 YAML
     chmod 600 "$WORK/blackgate.yaml"
@@ -96,13 +95,13 @@ YAML
 }
 
 reload() {
-    [ -f "$WORK/proxy.pid" ] || { echo "aucune pile en cours : scripts/stack.sh start" >&2; exit 2; }
+    [ -f "$WORK/proxy.pid" ] || { echo "no stack running: scripts/stack.sh start" >&2; exit 2; }
     write_config "$(fingerprint)"
     kill -HUP "$(cat "$WORK/proxy.pid")"
-    echo "BlackGate a relu sa configuration"
+    echo "BlackGate reloaded its configuration"
 }
 
-# Remplace (ou ajoute) les clés DB_* dans apps/server/.env, sans toucher au reste.
+# Replaces (or adds) the DB_* keys in apps/server/.env, leaving the rest untouched.
 update_env() {
     [ -f "$ENV_FILE" ] || cp "$ROOT/apps/server/.env.example" "$ENV_FILE"
     python3 -I - "$ENV_FILE" "$WORK/env" <<'PY'
@@ -123,19 +122,19 @@ PY
 }
 
 start() {
-    [ -x "$BLACKGATE_BIN" ] || { echo "absent : $BLACKGATE_BIN (cargo build --release dans le dépôt blackgate)" >&2; exit 2; }
-    [ -x "$BLACKGATE_CLI" ] || { echo "absent : $BLACKGATE_CLI" >&2; exit 2; }
-    [ -d "$WORK" ] && { echo "$WORK existe : scripts/stack.sh stop d'abord" >&2; exit 2; }
+    [ -x "$BLACKGATE_BIN" ] || { echo "missing: $BLACKGATE_BIN (cargo build --release in the blackgate repository)" >&2; exit 2; }
+    [ -x "$BLACKGATE_CLI" ] || { echo "missing: $BLACKGATE_CLI" >&2; exit 2; }
+    [ -d "$WORK" ] && { echo "$WORK exists: run scripts/stack.sh stop first" >&2; exit 2; }
     mkdir -p "$WORK/pg"
     chmod 700 "$WORK"
     local password owner_password
     password="$(openssl rand -hex 16)"
     owner_password="$(openssl rand -hex 16)"
 
-    # AC, certificat serveur (proxy et PostgreSQL), un certificat client, clé maîtresse.
+    # CA, server certificate (proxy and PostgreSQL), one client certificate, master key.
     "$BLACKGATE_CLI" -o json certs generate --dir "$WORK/certs" --client "$SITE" > "$WORK/certs.json"
 
-    # PostgreSQL : TLS seulement sur TCP, SCRAM.
+    # PostgreSQL: TLS only over TCP, SCRAM.
     cp "$WORK/certs/server.crt" "$WORK/certs/server.key" "$WORK/pg/"
     chmod 644 "$WORK/pg/server.crt" "$WORK/pg/server.key"
     cat > "$WORK/pg/init.sql" <<SQL
@@ -159,7 +158,7 @@ HBA
             && cp /stack/init.sql /docker-entrypoint-initdb.d/ \
             && exec docker-entrypoint.sh postgres -c ssl=on -c ssl_cert_file=/tmp/server.crt \
                -c ssl_key_file=/tmp/server.key -c hba_file=/tmp/hba.conf -c password_encryption=scram-sha-256' >/dev/null
-    # L'entrypoint joue init.sql sur un serveur temporaire, puis démarre le vrai.
+    # The entrypoint runs init.sql on a temporary server, then starts the real one.
     local ready=0
     for _ in $(seq 1 120); do
         if podman logs "$CONTAINER" 2>&1 | grep -q 'PostgreSQL init process complete' \
@@ -172,7 +171,7 @@ HBA
     [ "$ready" = 1 ] || { podman logs "$CONTAINER" 2>&1 | tail -30 >&2; exit 2; }
 
     write_config "$(fingerprint)"
-    # BlackGate ne charge ses clés que sous ./certs, ./config ou ./secrets.
+    # BlackGate only loads its keys from under ./certs, ./config or ./secrets.
     (cd "$WORK" && RUST_LOG=info exec "$BLACKGATE_BIN" --config "$WORK/blackgate.yaml") > "$WORK/blackgate.log" 2>&1 &
     echo $! > "$WORK/proxy.pid"
     wait_port "$PROXY_PORT" "BlackGate" "$WORK/blackgate.log"
@@ -185,8 +184,8 @@ DB_USER=app
 DB_PASSWORD=$password
 DB_OWNER_USER=tessel_owner
 DB_OWNER_PASSWORD=$owner_password
-# Tests seulement, jamais l'application : PostgreSQL lui-même, autour de BlackGate,
-# pour vérifier ce que la base garde vraiment (une colonne chiffrée porte du chiffré).
+# Tests only, never the application: PostgreSQL itself, around BlackGate,
+# to check what the database really keeps (an encrypted column holds ciphertext).
 DB_DIRECT_PORT=$PG_PORT
 DB_SSL_ROOT_CERT=$WORK/certs/ca.crt
 DB_SSL_CERT=$WORK/certs/clients/$SITE.crt
@@ -194,8 +193,8 @@ DB_SSL_KEY=$WORK/certs/clients/$SITE.key
 ENV
     chmod 600 "$WORK/env"
     update_env
-    echo "PostgreSQL sur 127.0.0.1:$PG_PORT, BlackGate sur 127.0.0.1:$PROXY_PORT"
-    echo "Lignes DB_* écrites dans apps/server/.env"
+    echo "PostgreSQL on 127.0.0.1:$PG_PORT, BlackGate on 127.0.0.1:$PROXY_PORT"
+    echo "DB_* lines written to apps/server/.env"
 }
 
 case "${1:-}" in
@@ -206,5 +205,5 @@ case "${1:-}" in
         ;;
     stop) stop ;;
     reload) reload ;;
-    *) echo "usage : $0 start|stop|reload" >&2; exit 2 ;;
+    *) echo "usage: $0 start|stop|reload" >&2; exit 2 ;;
 esac

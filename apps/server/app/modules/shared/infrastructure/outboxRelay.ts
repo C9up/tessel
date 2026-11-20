@@ -3,10 +3,10 @@ import { deliverOutboxRow } from '#modules/shared/infrastructure/events.js'
 import { claimOutboxBatch, deleteOutbox, type OutboxDb, type OutboxRow, rescheduleOutbox } from '#modules/shared/infrastructure/outbox.js'
 
 /**
- * Le relais de l'outbox (repris de nadeo) : une boucle de fond réserve les lignes dues,
- * les redélivre aux abonnés, puis les efface en cas de succès ou les repousse avec un
- * délai croissant. Au moins une fois ; le garde de déduplication rend la reprise sûre.
- * Démarré par `bin/server.ts`, jamais par le harnais de test.
+ * The outbox relay (taken from nadeo): a background loop claims the due rows,
+ * redelivers them to the subscribers, then deletes them on success or pushes them back
+ * with a growing delay. At least once; the deduplication guard makes the retry safe.
+ * Started by `bin/server.ts`, never by the test harness.
  */
 const POLL_MS = 10_000
 const BATCH = 50
@@ -14,14 +14,14 @@ const LEASE_SEC = 5 * 60
 const BASE_BACKOFF_SEC = 30
 const MAX_BACKOFF_SEC = 60 * 60
 const MAX_ATTEMPTS = 20
-/** Lettre morte : la ligne reste lisible pour l'exploitation, mais n'est plus rejouée. */
+/** Dead letter: the row stays readable for operations, but is no longer replayed. */
 const PARK_SEC = 100 * 365 * 24 * 60 * 60
 
 function backoffSeconds(attempt: number): number {
   return Math.min(BASE_BACKOFF_SEC * 2 ** attempt, MAX_BACKOFF_SEC)
 }
 
-/** Dépendances injectables, pour tester `tick()` sans base ni émetteur. */
+/** Injectable dependencies, to test `tick()` without a database or an emitter. */
 export interface OutboxRelayDeps {
   db: () => Promise<OutboxDb>
   claim: typeof claimOutboxBatch
@@ -85,7 +85,7 @@ export class OutboxRelay {
     }
   }
 
-  /** Une passe : réserver, redélivrer, effacer ou repousser. Rend le nombre de lignes traitées. */
+  /** One pass: claim, redeliver, delete or push back. Returns the number of rows handled. */
   async tick(): Promise<number> {
     const db = await this.#deps.db()
     const rows = await this.#deps.claim(db, {
@@ -121,5 +121,5 @@ export class OutboxRelay {
   }
 }
 
-/** Le relais du processus, démarré par `bin/server.ts` et arrêté par `AppProvider`. */
+/** The process's relay, started by `bin/server.ts` and stopped by `AppProvider`. */
 export const outboxRelay = new OutboxRelay()

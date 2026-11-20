@@ -4,9 +4,9 @@ import { databaseUrl } from '#modules/shared/infrastructure/databaseUrl.js'
 import env from '#start/env.js'
 
 /**
- * Une connexion de test : celle de l'application, sous `app`, à travers BlackGate en
- * TLS mutuel (scripts/stack.sh start). Une seule session, pour que les écritures et
- * les lectures d'un test la partagent (repris de Klinivia).
+ * A test connection: the application's own, as `app`, through BlackGate over mutual
+ * TLS (scripts/stack.sh start). A single session, so that a test's writes and reads
+ * share it (taken from Klinivia).
  */
 export function connectTestDb(): Promise<AsyncDatabaseConnection> {
   const url = databaseConfig.url
@@ -15,13 +15,13 @@ export function connectTestDb(): Promise<AsyncDatabaseConnection> {
 }
 
 /**
- * Le propriétaire, sur PostgreSQL lui-même, autour de BlackGate : ce que la base
- * garde vraiment. Tests seulement, pour vérifier qu'une colonne chiffrée porte du chiffré.
+ * The owner, on PostgreSQL itself, around BlackGate: what the database really
+ * keeps. Tests only, to check that an encrypted column holds ciphertext.
  */
 export function connectDirectDb(): Promise<AsyncDatabaseConnection> {
   const port = env.get('DB_DIRECT_PORT')
   const user = env.get('DB_OWNER_USER')
-  if (port === undefined || user === undefined) throw new Error('DB_DIRECT_PORT / DB_OWNER_USER absent de .env (scripts/stack.sh start)')
+  if (port === undefined || user === undefined) throw new Error('DB_DIRECT_PORT / DB_OWNER_USER missing from .env (scripts/stack.sh start)')
   return createNapiConnection(
     databaseUrl({
       host: env.get('DB_HOST'),

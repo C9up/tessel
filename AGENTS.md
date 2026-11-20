@@ -22,4 +22,6 @@ Tessel est une messagerie chiffrée de bout en bout (MLS). Lire [la vision](.wor
 
 ## Langue
 
-Documents de travail en français. Code, identifiants et messages de commit en anglais.
+Documents de travail (`.workstream/`) en français. Tout ce qui vit dans le code est en anglais : identifiants, commentaires, noms de tests, fixtures, messages d'erreur et de log, sorties des scripts, README, messages de commit (skill `code-in-english`, hook `pre-commit`).
+
+Aucune signature d'agent dans les commits ni dans les PR : pas de `Co-Authored-By` Claude ou autre, pas de « Generated with » (skill `no-ai-signatures`, hook `commit-msg`).

@@ -10,12 +10,12 @@ export default defineConfig({
     () => import('@c9up/blackhole/provider'),
     () => import('#providers/AppProvider.js'),
   ],
-  // Les commandes viennent des paquets, jamais du binaire global (absent d'une CI).
+  // Commands come from the packages, never from the global binary (absent in CI).
   commands: [() => import('@c9up/atlas/commands')],
   preloads: [() => import('#start/kernel.js'), () => import('#start/events.js'), () => import('#start/rpc.js')],
   modules: {
     path: './app/modules',
-    // Un module garde ses routes dans sa couche http (modèle nadeo).
+    // A module keeps its routes in its http layer (nadeo model).
     autoload: ['http/routes'],
   },
   tests: {

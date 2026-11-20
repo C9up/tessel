@@ -1,22 +1,22 @@
 import { DateTime } from '@c9up/chronos'
 
 /**
- * La base de tout événement du domaine (modèle nadeo) : un `eventId` stable,
- * clé d'idempotence, et l'instant où il s'est produit. Pur : `emit()` le remet
- * au publieur que l'infrastructure branche au démarrage
- * (`shared/infrastructure/events.ts`), qui le garde dans l'outbox avant que les
- * écouteurs ne l'entendent.
+ * The base of every domain event (nadeo model): a stable `eventId`, the
+ * idempotency key, and the instant it occurred. Pure: `emit()` hands it to the
+ * publisher that the infrastructure plugs in at startup
+ * (`shared/infrastructure/events.ts`), which keeps it in the outbox before the
+ * listeners hear it.
  *
- * Un événement ne porte JAMAIS de contenu de message : le serveur n'en a pas.
- * Ce qu'il porte s'inscrit au registre des métadonnées (story 15-02).
+ * An event NEVER carries message content: the server has none.
+ * What it does carry is entered in the metadata register (story 15-02).
  */
 export abstract class DomainEvent {
-  /** Identifiant stable de l'instance : la clé de déduplication. */
+  /** Stable identifier of the instance: the deduplication key. */
   readonly eventId: string = globalThis.crypto.randomUUID()
-  /** Instant ISO-8601 de la construction de l'événement. */
+  /** ISO-8601 instant at which the event was constructed. */
   readonly occurredAt: string = DateTime.now().toISO()
 
-  /** Publié : gardé durablement d'abord, puis livré aux écouteurs du processus. */
+  /** Published: kept durably first, then delivered to the process's listeners. */
   emit(): Promise<void> {
     return publish(this)
   }
@@ -24,7 +24,7 @@ export abstract class DomainEvent {
 
 let publish: (event: DomainEvent) => Promise<void> = async () => {}
 
-/** Branché une fois au démarrage par l'infrastructure, qui possède l'outbox et l'émetteur. */
+/** Plugged in once at startup by the infrastructure, which owns the outbox and the emitter. */
 export function setEventPublisher(fn: (event: DomainEvent) => Promise<void>): void {
   publish = fn
 }

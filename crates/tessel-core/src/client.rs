@@ -1,8 +1,8 @@
-//! Le client : un appareil certifié, son état MLS, ses groupes et sa réserve de
+//! The client: a certified device, its MLS state, its groups and its pool of
 //! *KeyPackages*.
 //!
-//! L'état vit pour l'instant en mémoire ; la base locale chiffrée (story 02-06) le
-//! rendra durable.
+//! For now the state lives in memory; the encrypted local database (story 02-06)
+//! will make it durable.
 
 use std::collections::HashMap;
 
@@ -12,7 +12,7 @@ use crate::groups::{Group, GroupId};
 use crate::identity::Device;
 use crate::key_packages::{KeyPackageError, KeyPackagePool, KeyPackageUpdate};
 
-/// Un appareil Tessel en fonctionnement.
+/// A running Tessel device.
 #[derive(Debug)]
 pub struct Client {
     pub(crate) provider: OpenMlsRustCrypto,
@@ -22,7 +22,7 @@ pub struct Client {
 }
 
 impl Client {
-    /// Démarre un client pour un appareil certifié.
+    /// Starts a client for a certified device.
     pub fn new(device: Device) -> Self {
         Self {
             provider: OpenMlsRustCrypto::default(),
@@ -32,14 +32,14 @@ impl Client {
         }
     }
 
-    /// L'appareil.
+    /// The device.
     pub fn device(&self) -> &Device {
         &self.device
     }
 
-    /// Renouvelle la réserve de *KeyPackages* à l'instant `now` (secondes Unix) et rend
-    /// ce qu'il faut publier et retirer sur le serveur. À appeler au démarrage, puis
-    /// régulièrement.
+    /// Renews the *KeyPackage* pool at time `now` (Unix seconds) and returns what must
+    /// be published and withdrawn on the server. To call at startup, then
+    /// periodically.
     pub fn refresh_key_packages(&mut self, now: u64) -> Result<KeyPackageUpdate, KeyPackageError> {
         self.key_packages.refresh(&self.provider, &self.device, now)
     }

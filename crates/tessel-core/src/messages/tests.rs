@@ -11,24 +11,24 @@ fn media() -> MediaRef {
         digest: [3; 32],
         size: 1_234_567,
         content_type: "image/jpeg".into(),
-        name: "plage.jpg".into(),
+        name: "beach.jpg".into(),
     }
 }
 
-/// Un message de chaque genre.
+/// One message of each kind.
 fn samples() -> Vec<Message> {
     let bodies = [
         Body::Text {
-            text: "salut 👋".into(),
+            text: "hi 👋".into(),
             reply_to: None,
         },
         Body::Text {
-            text: "oui !".into(),
+            text: "yes!".into(),
             reply_to: Some(id(1)),
         },
         Body::Media {
             media: media(),
-            caption: "regarde".into(),
+            caption: "look".into(),
             reply_to: Some(id(2)),
         },
         Body::Receipt {
@@ -41,7 +41,7 @@ fn samples() -> Vec<Message> {
         },
         Body::Edit {
             target: id(1),
-            text: "salut 👋 (édité)".into(),
+            text: "hi 👋 (edited)".into(),
         },
         Body::Delete { target: id(2) },
     ];
@@ -57,7 +57,7 @@ fn samples() -> Vec<Message> {
 }
 
 #[test]
-fn chaque_genre_fait_l_aller_retour() {
+fn every_kind_round_trips() {
     for message in samples() {
         let bytes = message.encode().unwrap();
         assert_eq!(Message::decode(&bytes).unwrap(), message);
@@ -65,7 +65,7 @@ fn chaque_genre_fait_l_aller_retour() {
 }
 
 #[test]
-fn un_nouveau_message_a_un_identifiant_au_hasard() {
+fn a_new_message_has_a_random_identifier() {
     let body = Body::Delete { target: id(1) };
     let (a, b) = (
         Message::new(0, body.clone()).unwrap(),
@@ -75,14 +75,14 @@ fn un_nouveau_message_a_un_identifiant_au_hasard() {
 }
 
 #[test]
-fn la_cle_d_un_media_ne_s_affiche_pas() {
+fn a_media_key_is_never_displayed() {
     let shown = format!("{:?}", media());
     assert!(shown.contains("MediaKey(..)"));
     assert!(!shown.contains("[9, 9"));
 }
 
 #[test]
-fn padme_garde_les_paliers_attendus() {
+fn padme_keeps_the_expected_buckets() {
     assert_eq!(padded_len(1), 256);
     assert_eq!(padded_len(256), 256);
     assert_eq!(padded_len(257), 272);
@@ -91,7 +91,7 @@ fn padme_garde_les_paliers_attendus() {
     for len in 1..70_000 {
         let padded = padded_len(len);
         assert!(padded >= len);
-        // Au plus 12 % de surcoût au-delà du minimum.
+        // At most 12% overhead beyond the minimum.
         assert!(
             len < MIN_PADDED || padded * 100 <= len * 112,
             "{len} → {padded}"
@@ -100,7 +100,7 @@ fn padme_garde_les_paliers_attendus() {
 }
 
 #[test]
-fn les_textes_courts_ont_tous_la_meme_taille() {
+fn short_texts_all_have_the_same_size() {
     let size = |text: &str| {
         Message {
             id: id(0),
@@ -117,13 +117,13 @@ fn les_textes_courts_ont_tous_la_meme_taille() {
     assert_eq!(size("ok"), MIN_PADDED);
     assert_eq!(
         size("ok"),
-        size("d'accord, je passe te prendre à 19 h devant la gare")
+        size("sure, I'll pick you up at 7 pm in front of the station 🚉")
     );
     assert_eq!(size(&"a".repeat(1000)), size(&"a".repeat(1010)));
 }
 
 #[test]
-fn chaque_prefixe_et_chaque_octet_change_sont_refuses_sans_planter() {
+fn every_prefix_and_every_altered_byte_is_rejected_without_panicking() {
     for message in samples() {
         let bytes = message.encode().unwrap();
         for end in 0..bytes.len() {
@@ -132,7 +132,7 @@ fn chaque_prefixe_et_chaque_octet_change_sont_refuses_sans_planter() {
         let mut longer = bytes.clone();
         longer.push(0);
         assert!(Message::decode(&longer).is_err());
-        // Changer un octet donne une erreur ou un autre message, jamais une panique.
+        // Altering a byte yields an error or another message, never a panic.
         for i in 0..bytes.len() {
             for flip in [0x01, 0x80, 0xff] {
                 let mut changed = bytes.clone();
@@ -144,14 +144,14 @@ fn chaque_prefixe_et_chaque_octet_change_sont_refuses_sans_planter() {
 }
 
 #[test]
-fn un_remplissage_non_nul_est_refuse() {
+fn nonzero_padding_is_rejected() {
     let mut bytes = samples()[0].encode().unwrap();
     *bytes.last_mut().unwrap() = 1;
     assert_eq!(Message::decode(&bytes), Err(MessageError::Malformed));
 }
 
 #[test]
-fn version_et_genre_inconnus_sont_nommes() {
+fn unknown_version_and_kind_are_named() {
     let mut bytes = samples()[0].encode().unwrap();
     bytes[0] = 2;
     assert_eq!(
@@ -164,7 +164,7 @@ fn version_et_genre_inconnus_sont_nommes() {
 }
 
 #[test]
-fn les_regles_du_format_tiennent_a_l_envoi_comme_a_la_reception() {
+fn the_format_rules_hold_on_sending_as_on_receiving() {
     let invalid = [
         Body::Text {
             text: String::new(),
@@ -223,7 +223,7 @@ fn les_regles_du_format_tiennent_a_l_envoi_comme_a_la_reception() {
         );
     }
 
-    // Le plus long texte permis passe.
+    // The longest allowed text goes through.
     let longest = Message {
         id: id(0),
         sent_at: 0,
@@ -239,15 +239,15 @@ fn les_regles_du_format_tiennent_a_l_envoi_comme_a_la_reception() {
 }
 
 #[test]
-fn un_accuse_vide_ou_de_l_utf8_invalide_sont_refuses_a_la_reception() {
-    // Un accusé de zéro message, rempli comme il faut.
+fn an_empty_receipt_or_invalid_utf8_is_rejected_on_receiving() {
+    // A receipt of zero messages, padded properly.
     let mut empty = vec![MESSAGE_VERSION, KIND_RECEIPT];
     empty.extend_from_slice(&[0; 16 + 8]);
     empty.extend_from_slice(&[2, 0, 0]);
     empty.resize(padded_len(empty.len()), 0);
     assert_eq!(Message::decode(&empty), Err(MessageError::Malformed));
 
-    // Un texte qui n'est pas de l'UTF-8.
+    // A text that is not UTF-8.
     let mut bad = vec![MESSAGE_VERSION, KIND_TEXT];
     bad.extend_from_slice(&[0; 16 + 8]);
     bad.extend_from_slice(&[0, 0, 2, 0xc3, 0x28]);
@@ -256,8 +256,8 @@ fn un_accuse_vide_ou_de_l_utf8_invalide_sont_refuses_a_la_reception() {
 }
 
 #[test]
-fn des_octets_au_hasard_ne_font_jamais_planter() {
-    // Un générateur déterministe (xorshift) : le test se rejoue à l'identique.
+fn random_bytes_never_cause_a_panic() {
+    // A deterministic generator (xorshift): the test replays identically.
     let mut state = 0x9e37_79b9_7f4a_7c15_u64;
     let mut next = || {
         state ^= state << 13;
@@ -268,7 +268,7 @@ fn des_octets_au_hasard_ne_font_jamais_planter() {
     for round in 0..20_000 {
         let len = (next() % 600) as usize;
         let mut bytes: Vec<u8> = (0..len).map(|_| next() as u8).collect();
-        // La moitié des essais commence comme un vrai message, pour aller plus loin.
+        // Half of the attempts start like a real message, to get further.
         if round % 2 == 0 && len >= 2 {
             bytes[0] = MESSAGE_VERSION;
             bytes[1] = (next() % 5) as u8 + 1;

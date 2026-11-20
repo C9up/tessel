@@ -1,17 +1,17 @@
 import { Migration } from '@c9up/atlas'
 
 /**
- * L'outbox des événements du domaine (modèle nadeo, sans tenant).
+ * The domain events outbox (nadeo model, without tenant).
  *
- * Chaque `DomainEvent.emit()` écrit une ligne ici avant la livraison rapide ; un relais
- * de fond rejoue les lignes en attente, pour qu'un écouteur qui lève ou un arrêt brutal
- * ne perde pas l'effet de bord. La table ne garde que le travail en cours.
+ * Each `DomainEvent.emit()` writes a row here before the fast delivery; a background
+ * relay replays the pending rows, so that a listener that throws or an abrupt stop
+ * does not lose the side effect. The table keeps only work in progress.
  */
 export default class CreateOutbox extends Migration {
   async up() {
     this.schema.createTable('outbox', (t) => {
       t.uuid('id').primary()
-      // Chiffrées par BlackGate (deploy/blackgate/columns.yaml) : la colonne porte le chiffré.
+      // Encrypted by BlackGate (deploy/blackgate/columns.yaml): the column holds the ciphertext.
       t.text('event_type').notNullable()
       t.text('payload').notNullable()
       t.timestamptz('created_at').notNullable().defaultTo(this.now())

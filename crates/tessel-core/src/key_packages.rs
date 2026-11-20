@@ -1,13 +1,14 @@
-//! *KeyPackages* (RFC 9420, §10 ; story 02-03).
+//! *KeyPackages* (RFC 9420, §10; story 02-03).
 //!
-//! Un appareil dépose sur le serveur une réserve de *KeyPackages* à usage unique, plus
-//! un *KeyPackage* de dernier recours, qui sert quand la réserve est vide. Quiconque
-//! veut l'ajouter à un groupe en prend un. La réserve se renouvelle :
-//! - un *KeyPackage* consommé (son secret a servi à rejoindre un groupe) est remplacé ;
-//! - un *KeyPackage* proche de sa fin de validité est retiré du serveur et remplacé, puis
-//!   son secret est effacé une fois la date passée (un *Welcome* peut encore être en route).
+//! A device uploads to the server a pool of single-use *KeyPackages*, plus a
+//! last-resort *KeyPackage* that is used when the pool is empty. Anyone who wants to
+//! add the device to a group takes one. The pool is renewed:
+//! - a consumed *KeyPackage* (its secret was used to join a group) is replaced;
+//! - a *KeyPackage* close to the end of its validity is withdrawn from the server and
+//!   replaced, then its secret is wiped once the date has passed (a *Welcome* may still
+//!   be in flight).
 //!
-//! L'heure vient de l'hôte (`now`, en secondes Unix) : le cœur ne lit pas d'horloge.
+//! The time comes from the host (`now`, in Unix seconds): the core reads no clock.
 
 use openmls::prelude::{
     Capabilities, ExtensionType, KeyPackage, KeyPackageBundle, KeyPackageIn, KeyPackageRef,
@@ -21,76 +22,76 @@ use tls_codec::{Deserialize as _, Serialize as _};
 use crate::identity::{Device, DeviceCertificate, IdentityError};
 use crate::suite::CIPHERSUITE;
 
-/// Taille de la réserve de *KeyPackages* à usage unique.
+/// Size of the pool of single-use *KeyPackages*.
 pub const KEY_PACKAGE_POOL: usize = 100;
 
-/// Durée de validité d'un *KeyPackage* : 12 semaines, la valeur par défaut d'OpenMLS.
+/// Validity period of a *KeyPackage*: 12 weeks, the OpenMLS default.
 pub const KEY_PACKAGE_LIFETIME: u64 = 60 * 60 * 24 * 7 * 12;
 
-/// Un *KeyPackage* est remplacé quand il lui reste moins de 2 semaines.
+/// A *KeyPackage* is replaced when less than 2 weeks of validity remain.
 pub const KEY_PACKAGE_RENEW_BEFORE: u64 = 60 * 60 * 24 * 7 * 2;
 
-/// Tolérance sur l'horloge des autres : un *KeyPackage* est valide une heure avant sa
-/// création (comme `Lifetime::new` d'OpenMLS).
+/// Tolerance for other parties' clocks: a *KeyPackage* is valid one hour before its
+/// creation (like OpenMLS's `Lifetime::new`).
 const CLOCK_SKEW: u64 = 60 * 60;
 
-/// Ce que la gestion des *KeyPackages* peut refuser.
+/// What *KeyPackage* handling can reject.
 #[derive(Debug, thiserror::Error, PartialEq, Eq)]
 pub enum KeyPackageError {
-    /// OpenMLS n'a pas pu créer le *KeyPackage*, ou le stockage a échoué.
+    /// OpenMLS could not create the *KeyPackage*, or storage failed.
     #[error("key package could not be created or stored")]
     Creation,
-    /// Les octets ne sont pas un *KeyPackage* MLS.
+    /// The bytes are not an MLS *KeyPackage*.
     #[error("not an MLS key package")]
     Malformed,
-    /// Le *KeyPackage* n'est pas dans la suite de Tessel (ADR-001).
+    /// The *KeyPackage* is not in Tessel's suite (ADR-001).
     #[error("key package uses another ciphersuite")]
     WrongCiphersuite,
-    /// Signature, version, durée de validité ou extensions invalides.
+    /// Invalid signature, version, validity period or extensions.
     #[error("key package is invalid: {0}")]
     Invalid(String),
-    /// Le *credential* ne porte pas un certificat d'appareil valide.
+    /// The *credential* does not carry a valid device certificate.
     #[error(transparent)]
     Identity(#[from] IdentityError),
 }
 
-/// Un *KeyPackage* que l'appareil a déposé.
+/// A *KeyPackage* the device has uploaded.
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct Published {
     reference: KeyPackageRef,
     not_after: u64,
     last_resort: bool,
-    /// Retiré du serveur ; son secret attend la fin de validité pour être effacé.
+    /// Withdrawn from the server; its secret waits for the end of validity to be wiped.
     withdrawn: bool,
 }
 
-/// Ce que l'appareil doit envoyer à l'annuaire (story 03-03) après un renouvellement.
+/// What the device must send to the directory (story 03-03) after a renewal.
 #[derive(Debug, Default, PartialEq, Eq)]
 pub struct KeyPackageUpdate {
-    /// Nouveaux *KeyPackages* à usage unique, sérialisés en `MLSMessage`.
+    /// New single-use *KeyPackages*, serialized as `MLSMessage`.
     pub publish: Vec<Vec<u8>>,
-    /// Nouveau *KeyPackage* de dernier recours, s'il change.
+    /// New last-resort *KeyPackage*, if it changes.
     pub last_resort: Option<Vec<u8>>,
-    /// Références (`KeyPackageRef`) des *KeyPackages* à retirer du serveur.
+    /// References (`KeyPackageRef`) of the *KeyPackages* to withdraw from the server.
     pub withdraw: Vec<Vec<u8>>,
 }
 
 impl KeyPackageUpdate {
-    /// Rien à envoyer.
+    /// Nothing to send.
     pub fn is_empty(&self) -> bool {
         self.publish.is_empty() && self.last_resort.is_none() && self.withdraw.is_empty()
     }
 }
 
-/// La réserve de *KeyPackages* d'un appareil.
+/// The *KeyPackage* pool of a device.
 #[derive(Debug, Default)]
 pub(crate) struct KeyPackagePool {
     published: Vec<Published>,
 }
 
 impl KeyPackagePool {
-    /// Remet la réserve en état à l'instant `now` : remplace ce qui est consommé ou
-    /// proche de sa fin, efface les secrets expirés, et rend ce qu'il faut envoyer.
+    /// Brings the pool back in shape at time `now`: replaces what is consumed or close
+    /// to its end, wipes expired secrets, and returns what needs to be sent.
     pub(crate) fn refresh(
         &mut self,
         provider: &OpenMlsRustCrypto,
@@ -186,8 +187,8 @@ fn create(
     ))
 }
 
-/// Ce que la feuille d'un appareil Tessel déclare savoir faire : la seule suite de
-/// Tessel, et l'extension *last_resort* qu'un *KeyPackage* de dernier recours porte.
+/// What the leaf of a Tessel device declares it supports: Tessel's only suite, and
+/// the *last_resort* extension that a last-resort *KeyPackage* carries.
 pub(crate) fn capabilities() -> Capabilities {
     Capabilities::builder()
         .ciphersuites(vec![CIPHERSUITE])
@@ -195,8 +196,8 @@ pub(crate) fn capabilities() -> Capabilities {
         .build()
 }
 
-/// Un *KeyPackage* reçu et vérifié : signatures, durée de validité, suite de Tessel,
-/// et certificat de l'appareil.
+/// A received and verified *KeyPackage*: signatures, validity period, Tessel suite,
+/// and device certificate.
 #[derive(Debug, Clone)]
 pub struct VerifiedKeyPackage {
     key_package: KeyPackage,
@@ -205,13 +206,13 @@ pub struct VerifiedKeyPackage {
 }
 
 impl VerifiedKeyPackage {
-    /// L'appareil qui l'a publié. Sa clé de compte reste à comparer à celle que l'on
-    /// connaît du compte (voir [`DeviceCertificate`]).
+    /// The device that published it. Its account key still has to be compared with the
+    /// one known for the account (see [`DeviceCertificate`]).
     pub fn certificate(&self) -> &DeviceCertificate {
         &self.certificate
     }
 
-    /// Sa référence (`KeyPackageRef`).
+    /// Its reference (`KeyPackageRef`).
     pub fn reference(&self) -> &[u8] {
         self.reference.as_slice()
     }
@@ -225,13 +226,13 @@ impl VerifiedKeyPackage {
         &self.reference
     }
 
-    /// Un *KeyPackage* de dernier recours.
+    /// A last-resort *KeyPackage*.
     pub fn is_last_resort(&self) -> bool {
         self.key_package.last_resort()
     }
 }
 
-/// Lit et vérifie un *KeyPackage* sérialisé en `MLSMessage`.
+/// Parses and verifies a *KeyPackage* serialized as `MLSMessage`.
 pub fn verify_key_package(bytes: &[u8]) -> Result<VerifiedKeyPackage, KeyPackageError> {
     let message =
         MlsMessageIn::tls_deserialize_exact(bytes).map_err(|_| KeyPackageError::Malformed)?;

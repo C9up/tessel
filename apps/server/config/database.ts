@@ -3,9 +3,8 @@ import app from '@c9up/ream/services/app'
 import { databaseUrl } from '#modules/shared/infrastructure/databaseUrl.js'
 import env from '#start/env.js'
 
-// À travers BlackGate seulement, en TLS mutuel. Les migrations ne se jouent pas au
-// démarrage : elles tournent sous le propriétaire du schéma (scripts/migrate.sh),
-// jamais sous le rôle de l'application.
+// Through BlackGate only, over mutual TLS. Migrations are not run at startup: they
+// run as the schema owner (scripts/migrate.sh), never as the application's role.
 export default defineConfig({
   url: databaseUrl({
     host: env.get('DB_HOST'),
@@ -18,7 +17,7 @@ export default defineConfig({
     key: env.get('DB_SSL_KEY'),
   }),
   migrations: {
-    // Paresseux : `app.migrationsPath()` lève tant que la racine de l'app n'est pas posée.
+    // Lazy: `app.migrationsPath()` throws until the app root is set.
     get paths() {
       return [app.migrationsPath()]
     },

@@ -2,7 +2,7 @@
   "name": "@tessel/protocol",
   "version": "0.1.0",
   "private": true,
-  "description": "Contrat client-serveur de Tessel (méthodes comet et leurs types), partagé par le serveur, le web et le mobile.",
+  "description": "Tessel's client-server contract (comet methods and their types), shared by the server, the web and mobile.",
   "type": "module",
   "exports": {
     ".": "./src/index.ts"

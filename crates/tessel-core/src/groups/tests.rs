@@ -16,7 +16,7 @@ fn now() -> u64 {
         .as_secs()
 }
 
-/// Un compte et ses appareils.
+/// An account and its devices.
 struct Account {
     id: AccountId,
     key: AccountKey,
@@ -40,14 +40,14 @@ impl Account {
     }
 }
 
-/// Le premier *KeyPackage* à usage unique que l'appareil publie.
+/// The first single-use *KeyPackage* the device publishes.
 fn key_package(client: &mut Client) -> VerifiedKeyPackage {
     let update = client.refresh_key_packages(now()).unwrap();
     verify_key_package(&update.publish[0]).unwrap()
 }
 
-/// Ce que fait le serveur d'un commit accepté : l'auteur reçoit l'accusé, les autres
-/// membres le commit.
+/// What the server does with an accepted commit: the author gets the acknowledgement,
+/// the other members get the commit.
 fn deliver_commit(
     group: &GroupId,
     author: &mut Client,
@@ -74,7 +74,8 @@ fn text_message(text: &str) -> Message {
     .unwrap()
 }
 
-/// `sender` chiffre un texte ; chaque lecteur doit le lire, chaque exclu non.
+/// `sender` encrypts a text; every reader must be able to read it, every excluded
+/// device must not.
 fn say(
     group: &GroupId,
     sender: &mut Client,
@@ -106,7 +107,7 @@ fn say(
 }
 
 #[test]
-fn trois_comptes_deux_appareils_ajouts_retraits_et_depart() {
+fn three_accounts_two_devices_additions_removals_and_departure() {
     let (alice, bob, carol) = (
         Account::new("alice"),
         Account::new("bob"),
@@ -116,7 +117,8 @@ fn trois_comptes_deux_appareils_ajouts_retraits_et_depart() {
     let (mut b1, mut b2) = (bob.device(), bob.device());
     let (mut c1, mut c2) = (carol.device(), carol.device());
 
-    // Alice crée le groupe et ajoute son autre appareil, Bob (deux appareils) et Carol (un).
+    // Alice creates the group and adds her other device, Bob (two devices) and Carol
+    // (one).
     let group = a1.create_group().unwrap();
     let kps = [
         key_package(&mut a2),
@@ -136,10 +138,10 @@ fn trois_comptes_deux_appareils_ajouts_retraits_et_depart() {
         &mut b1,
         &mut [&mut a1, &mut a2, &mut b2, &mut c1],
         &mut [],
-        "bonjour",
+        "hello",
     );
 
-    // Bob ajoute le second appareil de Carol ; tout le monde le voit arriver.
+    // Bob adds Carol's second device; everyone sees it arrive.
     let kp = key_package(&mut c2);
     let out = b2.add_devices(&group, &[kp]).unwrap();
     b2.commit_accepted(&group).unwrap();
@@ -158,10 +160,10 @@ fn trois_comptes_deux_appareils_ajouts_retraits_et_depart() {
         &mut c2,
         &mut [&mut a1, &mut a2, &mut b1, &mut b2, &mut c1],
         &mut [],
-        "me voilà",
+        "here I am",
     );
 
-    // Alice retire un appareil de Bob ; il ne lit plus rien.
+    // Alice removes one of Bob's devices; it can no longer read anything.
     let b2_id = b2.device().certificate().device_id();
     let out = a1
         .remove_devices(&group, &[Removal::Device(bob.id.clone(), b2_id)])
@@ -188,10 +190,10 @@ fn trois_comptes_deux_appareils_ajouts_retraits_et_depart() {
         &mut c1,
         &mut [&mut a1, &mut a2, &mut b1, &mut c2],
         &mut [&mut b2],
-        "sans b2",
+        "without b2",
     );
 
-    // Alice (depuis son second appareil) retire tout le compte de Carol.
+    // Alice (from her second device) removes Carol's whole account.
     let out = a2
         .remove_devices(&group, &[Removal::Account(carol.id.clone())])
         .unwrap();
@@ -210,10 +212,10 @@ fn trois_comptes_deux_appareils_ajouts_retraits_et_depart() {
         &mut b1,
         &mut [&mut a1, &mut a2],
         &mut [&mut b2, &mut c1, &mut c2],
-        "sans carol",
+        "without carol",
     );
 
-    // Bob quitte : sa proposition entre par le commit d'Alice.
+    // Bob leaves: his proposal gets in through Alice's commit.
     let proposal = b1.leave_group(&group).unwrap();
     for member in [&mut a1, &mut a2] {
         assert!(matches!(
@@ -235,13 +237,13 @@ fn trois_comptes_deux_appareils_ajouts_retraits_et_depart() {
         &mut a2,
         &mut [&mut a1],
         &mut [&mut b1, &mut b2, &mut c1, &mut c2],
-        "entre nous",
+        "just us",
     );
     assert_eq!(a1.members(&group).unwrap().len(), 2);
 }
 
 #[test]
-fn un_commit_refuse_est_rejoue_sur_l_etat_a_jour() {
+fn a_rejected_commit_is_replayed_on_the_up_to_date_state() {
     let (alice, bob, carol, dave) = (
         Account::new("alice"),
         Account::new("bob"),
@@ -255,7 +257,7 @@ fn un_commit_refuse_est_rejoue_sur_l_etat_a_jour() {
     a.commit_accepted(&group).unwrap();
     b.join_group(&out.welcome.unwrap()).unwrap();
 
-    // Alice et Bob commitent dans la même epoch ; le serveur prend celui d'Alice.
+    // Alice and Bob commit in the same epoch; the server takes Alice's.
     let kp_c = key_package(&mut c);
     let kp_d = key_package(&mut d);
     let winner = a.add_devices(&group, &[kp_c]).unwrap();
@@ -266,7 +268,7 @@ fn un_commit_refuse_est_rejoue_sur_l_etat_a_jour() {
     b.process(&winner.commit).unwrap();
     c.join_group(&winner.welcome.unwrap()).unwrap();
 
-    // Bob rejoue son ajout de Dave sur l'epoch suivante, sans rien perdre.
+    // Bob replays his addition of Dave on the next epoch, losing nothing.
     let replay = b.retry_commit(&group).unwrap().unwrap();
     deliver_commit(&group, &mut b, &mut [&mut a, &mut c], &replay);
     d.join_group(&replay.welcome.unwrap()).unwrap();
@@ -276,10 +278,10 @@ fn un_commit_refuse_est_rejoue_sur_l_etat_a_jour() {
         &mut d,
         &mut [&mut a, &mut b, &mut c],
         &mut [],
-        "tous là",
+        "all here",
     );
 
-    // Une intention déjà accomplie par un autre n'a plus d'objet.
+    // An intent already fulfilled by someone else no longer has a purpose.
     let mut e = Account::new("eve").device();
     let kp_e = key_package(&mut e);
     let first = a.add_devices(&group, std::slice::from_ref(&kp_e)).unwrap();
@@ -291,8 +293,9 @@ fn un_commit_refuse_est_rejoue_sur_l_etat_a_jour() {
 }
 
 #[test]
-fn un_commit_recu_annule_le_notre_sans_perdre_l_intention() {
-    // Le refus du serveur peut arriver après le commit gagnant : le traiter suffit.
+fn a_received_commit_voids_ours_without_losing_the_intent() {
+    // The server's rejection may arrive after the winning commit: processing it is
+    // enough.
     let (alice, bob, carol) = (
         Account::new("alice"),
         Account::new("bob"),
@@ -321,11 +324,11 @@ fn un_commit_recu_annule_le_notre_sans_perdre_l_intention() {
 }
 
 #[test]
-fn un_welcome_d_une_autre_suite_est_refuse() {
+fn a_welcome_from_another_ciphersuite_is_rejected() {
     let (alice, bob) = (Account::new("alice"), Account::new("bob"));
     let (a, mut b) = (alice.device(), bob.device());
     let other = Ciphersuite::MLS_128_DHKEMX25519_CHACHA20POLY1305_SHA256_Ed25519;
-    // Bob a un KeyPackage de l'autre suite (fabriqué à la main : Tessel n'en crée pas).
+    // Bob has a KeyPackage of the other suite (hand-made: Tessel does not create any).
     let bob_kp = KeyPackage::builder()
         .build(
             other,
@@ -354,7 +357,7 @@ fn un_welcome_d_une_autre_suite_est_refuse() {
 }
 
 #[test]
-fn un_appareil_sans_certificat_ne_peut_pas_entrer() {
+fn a_device_without_a_certificate_cannot_join() {
     let (alice, bob) = (Account::new("alice"), Account::new("bob"));
     let (mut a, mut b) = (alice.device(), bob.device());
     let group = a.create_group().unwrap();
@@ -362,8 +365,8 @@ fn un_appareil_sans_certificat_ne_peut_pas_entrer() {
     a.commit_accepted(&group).unwrap();
     b.join_group(&out.welcome.unwrap()).unwrap();
 
-    // Un membre (ici Alice, en passant sous Tessel) ajoute un appareil qui ne porte
-    // qu'un nom, sans certificat.
+    // A member (here Alice, bypassing Tessel) adds a device that carries only a name,
+    // without a certificate.
     let signer = Device::create(&alice.id, &alice.key).unwrap();
     let bare = CredentialWithKey {
         credential: BasicCredential::new(b"mallory@tessel.example".to_vec()).into(),
@@ -390,7 +393,7 @@ fn un_appareil_sans_certificat_ne_peut_pas_entrer() {
 }
 
 #[test]
-fn un_message_mal_forme_est_refuse_sans_planter() {
+fn a_malformed_message_is_rejected_without_crashing() {
     let mut a = Account::new("alice").device();
     let group = a.create_group().unwrap();
     assert_eq!(a.process(b"\x00\x01garbage"), Err(GroupError::Malformed));
@@ -399,7 +402,7 @@ fn un_message_mal_forme_est_refuse_sans_planter() {
     assert_eq!(a.process(&message), Err(GroupError::OwnMessage));
 }
 
-/// Alice et Bob, un groupe à deux.
+/// Alice and Bob, a group of two.
 fn pair() -> (GroupId, Client, Client) {
     let mut a = Account::new("alice").device();
     let mut b = Account::new("bob").device();
@@ -411,12 +414,12 @@ fn pair() -> (GroupId, Client, Client) {
 }
 
 #[test]
-fn un_contenu_illisible_est_rendu_avec_son_expediteur_et_le_groupe_continue() {
+fn unreadable_content_is_returned_with_its_sender_and_the_group_carries_on() {
     let (group, mut a, mut b) = pair();
     for (data, error) in [
         (
-            &b"pas un message"[..],
-            MessageError::UnsupportedVersion(b'p'),
+            &b"not a message"[..],
+            MessageError::UnsupportedVersion(b'n'),
         ),
         (&[MESSAGE_VERSION, 99][..], MessageError::UnknownKind(99)),
         (&[MESSAGE_VERSION][..], MessageError::Malformed),
@@ -432,17 +435,17 @@ fn un_contenu_illisible_est_rendu_avec_son_expediteur_et_le_groupe_continue() {
             other => panic!("expected a message, got {other:?}"),
         }
     }
-    say(&group, &mut a, &mut [&mut b], &mut [], "toujours là");
+    say(&group, &mut a, &mut [&mut b], &mut [], "still here");
 }
 
 #[test]
-fn la_taille_chiffree_ne_trahit_pas_la_longueur_d_un_texte_court() {
+fn the_encrypted_size_does_not_betray_the_length_of_a_short_text() {
     let (group, mut a, _b) = pair();
     let short = a.send_message(&group, &text_message("ok")).unwrap();
     let long = a
         .send_message(
             &group,
-            &text_message("d'accord, je passe te prendre à 19 h devant la gare"),
+            &text_message("sure, I'll pick you up at 7 pm in front of the station 🚉"),
         )
         .unwrap();
     assert_eq!(short.len(), long.len());

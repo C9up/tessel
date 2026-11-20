@@ -1,25 +1,25 @@
 /**
- * Le côté durable de l'outbox (repris de nadeo, sans tenant).
+ * The durable side of the outbox (taken from nadeo, without tenant).
  *
- * Des fonctions sur une poignée `OutboxDb` minimale, que la vraie connexion atlas
- * satisfait par sa forme : les tests passent un double en mémoire sans cast.
+ * Functions over a minimal `OutboxDb` handle, which the real atlas connection
+ * satisfies by its shape: tests pass an in-memory double without a cast.
  *
- * Toute l'heure est celle de la BASE (`now()`) : ni l'horloge du client ni un
- * décalage entre client et base n'entrent en jeu. Chaque paramètre porte un cast
- * explicite (`::uuid`, `::double precision`), le pilote liant une chaîne JS en `text`.
+ * All time is the DATABASE's (`now()`): neither the client's clock nor any skew
+ * between client and database comes into play. Each parameter carries an explicit
+ * cast (`::uuid`, `::double precision`), since the driver binds a JS string as `text`.
  *
- * `event_type`, `payload` et `last_error` sont chiffrés par BlackGate : la base n'y voit
- * que du chiffré, l'application les lit en clair.
+ * `event_type`, `payload` and `last_error` are encrypted by BlackGate: the database
+ * sees only ciphertext there, the application reads them in clear.
  */
 export interface OutboxRow {
   id: string
   event_type: string
-  /** Le JSON de l'événement, en texte (la colonne porte le chiffré de BlackGate). */
+  /** The event's JSON, as text (the column holds BlackGate's ciphertext). */
   payload: unknown
   attempts: number
 }
 
-/** La surface de base dont l'outbox a besoin : un sous-ensemble de la connexion atlas. */
+/** The database surface the outbox needs: a subset of the atlas connection. */
 export interface OutboxDb {
   query(sql: string, params?: unknown[]): Promise<OutboxRow[]>
   execute(sql: string, params?: unknown[]): Promise<{ rowsAffected: number }>
@@ -29,11 +29,11 @@ export interface OutboxEntry {
   id: string
   eventType: string
   payload: unknown
-  /** Secondes avant que le relais puisse prendre la ligne (délai laissé au chemin rapide). */
+  /** Seconds before the relay may take the row (time left to the fast path). */
   delaySeconds: number
 }
 
-/** Garder un événement en attente, que le relais pourra prendre après `delaySeconds`. */
+/** Keep an event pending, which the relay may take after `delaySeconds`. */
 export async function enqueueOutbox(db: OutboxDb, entry: OutboxEntry): Promise<void> {
   await db.execute(
     `INSERT INTO outbox (id, event_type, payload, created_at, available_at, attempts)
@@ -43,10 +43,9 @@ export async function enqueueOutbox(db: OutboxDb, entry: OutboxEntry): Promise<v
 }
 
 /**
- * RÉSERVER au plus `limit` lignes dues : `FOR UPDATE SKIP LOCKED` prend celles qu'aucun
- * autre relais ne tient, et la même requête repousse leur `available_at` de
- * `leaseSeconds`. Un relais qui meurt en pleine livraison laisse le bail expirer : la
- * ligne redevient due.
+ * CLAIM at most `limit` due rows: `FOR UPDATE SKIP LOCKED` takes those no other relay
+ * holds, and the same query pushes their `available_at` back by `leaseSeconds`. A relay
+ * that dies mid-delivery lets the lease expire: the row becomes due again.
  */
 export function claimOutboxBatch(db: OutboxDb, opts: { limit: number; leaseSeconds: number }): Promise<OutboxRow[]> {
   return db.query(
@@ -63,12 +62,12 @@ export function claimOutboxBatch(db: OutboxDb, opts: { limit: number; leaseSecon
   )
 }
 
-/** Retirer une ligne livrée : l'outbox ne garde que le travail en cours. */
+/** Remove a delivered row: the outbox keeps only work in progress. */
 export async function deleteOutbox(db: OutboxDb, id: string): Promise<void> {
   await db.execute('DELETE FROM outbox WHERE id = $1::uuid', [id])
 }
 
-/** Compter un échec, noter l'erreur, et repousser la prochaine tentative de `delaySeconds`. */
+/** Count a failure, record the error, and push the next attempt back by `delaySeconds`. */
 export async function rescheduleOutbox(db: OutboxDb, id: string, opts: { delaySeconds: number; error: string }): Promise<void> {
   await db.execute(
     `UPDATE outbox SET attempts = attempts + 1,

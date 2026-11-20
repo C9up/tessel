@@ -5,23 +5,23 @@ coverage/
 *.log
 .DS_Store
 
-# Rust (souvent un lien vers un dossier de build hors du dépôt)
+# Rust (often a link to a build folder outside the repository)
 /target
 
-# Réglages locaux des agents
+# Local agent settings
 .claude/settings.local.json
 
-# Pile de développement (certificats, mots de passe) : scripts/stack.sh
+# Development stack (certificates, passwords): scripts/stack.sh
 .stack/
 
-# Secrets locaux
+# Local secrets
 .env
 .env.*
 !.env.example
 
-# Workstream : seul l'état local de l'application est ignoré, le travail se commite.
+# Workstream: only the application's local state is ignored, the work is committed.
 .workstream/.local/
 
-# Sorties générées du cœur Rust (liaisons WASM et natives)
+# Generated output of the Rust core (WASM and native bindings)
 packages/*/pkg/
 packages/*/generated/

@@ -1,55 +1,55 @@
 # Tessel
 
-Messagerie chiffrée de bout en bout, open source, sur le web et sur mobile. Tessel veut remplacer WhatsApp et reprend de Discord ses espaces, salons et rôles. Le serveur ne lit rien : il ne fait qu'acheminer des enveloppes qu'il ne sait pas ouvrir.
+End-to-end encrypted messaging, open source, on the web and on mobile. Tessel aims to replace WhatsApp and takes its spaces, channels and roles from Discord. The server reads nothing: it only routes envelopes it cannot open.
 
-Pourquoi et comment : [la vision](.workstream/vision.md). Le travail est suivi dans [`.workstream/`](.workstream/).
+Why and how: [the vision](.workstream/vision.md). The work is tracked in [`.workstream/`](.workstream/).
 
-## Organisation
+## Layout
 
-| Dossier | Contenu |
+| Folder | Contents |
 |---|---|
-| `apps/server` | App [Ream](https://github.com/C9up/ream) : l'API (`comet`), le temps réel (`relay`) et l'interface (aurora / nebula), écrite une fois pour le web puis pour le mobile |
-| `crates/tessel-core` | Le cœur Rust : MLS, base locale chiffrée, file d'envoi, chiffrement des médias |
-| `crates/tessel-wasm` | Sa liaison WASM pour le web. La liaison mobile suivra la stack mobile de Ream (ADR-003) |
-| `packages/core-web` | Le cœur pour le navigateur : le module WASM et son chargeur |
-| `packages/protocol` | Le contrat client-serveur, partagé par le serveur et les clients |
+| `apps/server` | [Ream](https://github.com/C9up/ream) app: the API (`comet`), real time (`relay`) and the interface (aurora / nebula), written once for the web and then for mobile |
+| `crates/tessel-core` | The Rust core: MLS, encrypted local database, send queue, media encryption |
+| `crates/tessel-wasm` | Its WASM binding for the web. The mobile binding will follow Ream's mobile stack (ADR-003) |
+| `packages/core-web` | The core for the browser: the WASM module and its loader |
+| `packages/protocol` | The client-server contract, shared by the server and the clients |
 
-## Lancer
+## Running
 
-Prérequis : Node ≥ 24, pnpm 12, Rust par rustup (la chaîne et ses cibles sont fixées par `rust-toolchain.toml` ; `scripts/cargo.sh` passe par rustup même s'il n'est pas dans le PATH), `wasm-bindgen-cli` 0.2.129, Podman, `podman-compose`, et les binaires de [BlackGate](https://github.com/C9up/blackgate) (build release ; chemin par défaut dans `scripts/stack.sh`, ou `BLACKGATE_BIN` / `BLACKGATE_CLI`).
+Prerequisites: Node ≥ 24, pnpm 12, Rust through rustup (the toolchain and its targets are pinned by `rust-toolchain.toml`; `scripts/cargo.sh` goes through rustup even when it is not in the PATH), `wasm-bindgen-cli` 0.2.129, Podman, `podman-compose`, and the [BlackGate](https://github.com/C9up/blackgate) binaries (release build; default path in `scripts/stack.sh`, or `BLACKGATE_BIN` / `BLACKGATE_CLI`).
 
-PostgreSQL n'est joignable qu'à travers BlackGate, en TLS mutuel, en développement comme en production. Deux rôles : `tessel_owner` possède le schéma et joue les migrations, `app` fait tourner l'application et ne possède rien.
+PostgreSQL is reachable only through BlackGate, over mutual TLS, in development as in production. Two roles: `tessel_owner` owns the schema and runs the migrations, `app` runs the application and owns nothing.
 
 ```bash
 pnpm install
 cp apps/server/.env.example apps/server/.env
 pnpm --filter @tessel/server exec ream generate:key
-pnpm infra      # PostgreSQL + BlackGate (scripts/stack.sh) et KeyDB ; écrit les lignes DB_* du .env
-pnpm --filter @tessel/server migrate   # sous tessel_owner (scripts/migrate.sh)
-pnpm dev        # serveur + coquille web
-pnpm check      # lint, types, tests TS et Rust, audit des dépendances
-pnpm infra:down # arrête tout et efface les certificats et mots de passe de la pile
+pnpm infra      # PostgreSQL + BlackGate (scripts/stack.sh) and KeyDB; writes the DB_* lines of .env
+pnpm --filter @tessel/server migrate   # as tessel_owner (scripts/migrate.sh)
+pnpm dev        # server + web shell
+pnpm check      # lint, types, TS and Rust tests, dependency audit
+pnpm infra:down # stops everything and erases the stack's certificates and passwords
 ```
 
-Le cœur pour le web :
+The core for the web:
 
 ```bash
 pnpm --filter @tessel/core-web build   # tessel-wasm → packages/core-web/generated
 ```
 
-Le mobile n'utilise ni React Native ni Expo : il se construira sur la stack mobile de Ream (son ADR-009, epic 73), dont Tessel est l'app pilote.
+Mobile uses neither React Native nor Expo: it will be built on Ream's mobile stack (its ADR-009, epic 73), of which Tessel is the pilot app.
 
-Les colonnes que BlackGate chiffre sont déclarées dans `deploy/blackgate/columns.yaml` avant la migration qui les crée, puis `pnpm infra:reload`. Les colonnes laissées en clair sont listées, avec leur raison, dans `deploy/blackgate/clear-columns.yaml`.
+The columns BlackGate encrypts are declared in `deploy/blackgate/columns.yaml` before the migration that creates them, then `pnpm infra:reload`. The columns left in clear are listed, with their reason, in `deploy/blackgate/clear-columns.yaml`.
 
-Ports de développement, choisis libres par rapport aux autres apps Ream de la machine :
+Development ports, chosen to be free of the machine's other Ream apps:
 
 | Service | Port |
 |---|---|
-| Serveur (API + web) | 3460 |
-| BlackGate (la base, pour l'application) | 5460 |
-| PostgreSQL en direct (tests seulement) | 5461 |
+| Server (API + web) | 3460 |
+| BlackGate (the database, for the application) | 5460 |
+| PostgreSQL direct (tests only) | 5461 |
 | KeyDB | 6460 |
 
-## Licence
+## License
 
 [MIT](LICENSE) (ADR-005).

@@ -9,7 +9,7 @@ fn alice() -> AccountId {
 }
 
 #[test]
-fn un_compte_valide_se_lit_et_se_reecrit() {
+fn a_valid_account_parses_and_round_trips() {
     let account = alice();
     assert_eq!(account.name(), "alice");
     assert_eq!(account.domain(), "tessel.example");
@@ -20,27 +20,27 @@ fn un_compte_valide_se_lit_et_se_reecrit() {
 }
 
 #[test]
-fn les_comptes_invalides_sont_refuses() {
+fn invalid_accounts_are_rejected() {
     for bad in [
-        "alice",                       // pas de domaine
-        "al@tessel.example",           // trop court
-        "Alice@tessel.example",        // majuscule
-        "1alice@tessel.example",       // ne commence pas par une lettre
-        "\u{0430}lice@tessel.example", // « а » cyrillique : homoglyphe
+        "alice",                       // no domain
+        "al@tessel.example",           // too short
+        "Alice@tessel.example",        // uppercase
+        "1alice@tessel.example",       // does not start with a letter
+        "\u{0430}lice@tessel.example", // Cyrillic "а": homoglyph
         "ali ce@tessel.example",
         "alice@Tessel.example",
         "alice@-tessel.example",
         "alice@tessel..example",
         "alice@",
         "alice@tessel.example@x",
-        "abcdefghijklmnopqrstuvwxyz0123456@x.y", // 33 caractères
+        "abcdefghijklmnopqrstuvwxyz0123456@x.y", // 33 characters
     ] {
         assert!(AccountId::parse(bad).is_err(), "{bad}");
     }
 }
 
 #[test]
-fn un_certificat_signe_par_le_compte_se_verifie() {
+fn a_certificate_signed_by_the_account_verifies() {
     let account_key = AccountKey::generate().unwrap();
     let device = Device::create(&alice(), &account_key).unwrap();
     let certificate = device.certificate();
@@ -53,7 +53,7 @@ fn un_certificat_signe_par_le_compte_se_verifie() {
 }
 
 #[test]
-fn un_certificat_altere_est_refuse() {
+fn a_tampered_certificate_is_rejected() {
     let account_key = AccountKey::generate().unwrap();
     let device = Device::create(&alice(), &account_key).unwrap();
 
@@ -69,14 +69,14 @@ fn un_certificat_altere_est_refuse() {
     other_key.device_key = public_key(DeviceKey::generate().unwrap().public_key()).unwrap();
     assert_eq!(other_key.verify(), Err(IdentityError::BadSignature));
 
-    // Une autre clé de compte qui se substitue : la signature ne vérifie plus.
+    // Another account key substituting itself: the signature no longer verifies.
     let mut usurped = device.certificate().clone();
     usurped.account_key = public_key(AccountKey::generate().unwrap().public_key()).unwrap();
     assert_eq!(usurped.verify(), Err(IdentityError::BadSignature));
 }
 
 #[test]
-fn des_octets_mal_formes_sont_refuses() {
+fn malformed_bytes_are_rejected() {
     let account_key = AccountKey::generate().unwrap();
     let device = Device::create(&alice(), &account_key).unwrap();
     let bytes = device.certificate().to_bytes().unwrap();
@@ -100,8 +100,8 @@ fn des_octets_mal_formes_sont_refuses() {
 }
 
 #[test]
-fn un_nouvel_appareil_se_fait_certifier_par_un_appareil_du_compte() {
-    // Story 03-04 : le nouvel appareil crée sa clé et n'envoie que la publique.
+fn a_new_device_is_certified_by_a_device_of_the_account() {
+    // Story 03-04: the new device creates its key and only sends the public part.
     let account_key = AccountKey::generate().unwrap();
     let new_key = DeviceKey::generate().unwrap();
     let certificate = account_key
@@ -110,7 +110,7 @@ fn un_nouvel_appareil_se_fait_certifier_par_un_appareil_du_compte() {
     let device = Device::new(new_key, certificate.clone()).unwrap();
     assert_eq!(device.certificate(), &certificate);
 
-    // Un certificat fait pour une autre clé est refusé.
+    // A certificate made for another key is rejected.
     assert_eq!(
         Device::new(DeviceKey::generate().unwrap(), certificate).unwrap_err(),
         IdentityError::KeyMismatch
@@ -118,7 +118,7 @@ fn un_nouvel_appareil_se_fait_certifier_par_un_appareil_du_compte() {
 }
 
 #[test]
-fn un_membre_du_groupe_verifie_l_appareil_par_son_credential() {
+fn a_group_member_verifies_the_device_through_its_credential() {
     let account_key = AccountKey::generate().unwrap();
     let device = Device::create(&alice(), &account_key).unwrap();
     let provider = OpenMlsRustCrypto::default();
@@ -141,13 +141,13 @@ fn un_membre_du_groupe_verifie_l_appareil_par_son_credential() {
     assert_eq!(verified.device_id(), device.certificate().device_id());
     assert_eq!(verified.account_key(), account_key.public_key());
 
-    // La même feuille présentée avec une autre clé de signature est refusée.
+    // The same leaf presented with another signing key is rejected.
     let other = DeviceKey::generate().unwrap();
     assert_eq!(
         DeviceCertificate::from_credential(&member.credential, other.public_key()),
         Err(IdentityError::KeyMismatch)
     );
-    // Un credential qui ne porte pas de certificat est refusé.
+    // A credential that carries no certificate is rejected.
     let bare: Credential = BasicCredential::new(b"alice@tessel.example".to_vec()).into();
     assert_eq!(
         DeviceCertificate::from_credential(&bare, &member.signature_key),
@@ -156,7 +156,7 @@ fn un_membre_du_groupe_verifie_l_appareil_par_son_credential() {
 }
 
 #[test]
-fn aucune_cle_privee_n_apparait_dans_le_debug() {
+fn no_private_key_appears_in_debug() {
     let account_key = AccountKey::generate().unwrap();
     let device = Device::create(&alice(), &account_key).unwrap();
     let private = account_key.0.private.as_slice();
@@ -166,7 +166,7 @@ fn aucune_cle_privee_n_apparait_dans_le_debug() {
 }
 
 #[test]
-fn aucun_prefixe_tronque_ne_fait_paniquer_la_lecture() {
+fn no_truncated_prefix_makes_parsing_panic() {
     let account_key = AccountKey::generate().unwrap();
     let device = Device::create(&alice(), &account_key).unwrap();
     let bytes = device.certificate().to_bytes().unwrap();

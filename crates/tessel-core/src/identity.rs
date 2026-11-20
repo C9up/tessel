@@ -1,16 +1,17 @@
-//! Identité de compte et d'appareil (ADR-002, story 02-02).
+//! Account and device identity (ADR-002, story 02-02).
 //!
-//! Un compte `pseudo@domaine` a une clé d'identité (Ed25519). Chaque appareil a sa
-//! propre clé de signature MLS, et un certificat signé par la clé du compte qui lie
-//! l'appareil au compte. Le certificat voyage dans le *BasicCredential* MLS de
-//! l'appareil : tout membre d'un groupe peut le vérifier.
+//! An account `name@domain` has an identity key (Ed25519). Each device has its own
+//! MLS signing key, and a certificate signed by the account key that binds the device
+//! to the account. The certificate travels in the device's MLS *BasicCredential*:
+//! any member of a group can verify it.
 //!
-//! Ce que la vérification ne dit pas : que la clé de compte est bien celle de
-//! `pseudo@domaine`. Ce lien vient de l'annuaire du serveur (story 03-01) et des codes
-//! de sécurité (story 02-09) ; l'appelant compare `account_key` à la clé qu'il connaît.
+//! What verification does not tell: that the account key really is the one of
+//! `name@domain`. That link comes from the server directory (story 03-01) and from the
+//! security codes (story 02-09); the caller compares `account_key` with the key it
+//! knows.
 //!
-//! Les clés privées ne sortent jamais d'ici : aucun type public ne les rend, ne les
-//! sérialise ni ne les affiche, et elles sont effacées de la mémoire à la libération.
+//! Private keys never leave this module: no public type returns, serializes or
+//! displays them, and they are wiped from memory when dropped.
 
 use std::fmt;
 use std::str::FromStr;
@@ -27,51 +28,51 @@ use tls_codec::{
 };
 use zeroize::Zeroizing;
 
-/// Schéma de signature des clés de compte et d'appareil : celui de la suite 0x0001.
+/// Signature scheme of account and device keys: the one of suite 0x0001.
 const SCHEME: SignatureScheme = SignatureScheme::ED25519;
 
-/// Étiquette de signature du certificat, sur le modèle de `SignWithLabel` (RFC 9420,
-/// §5.1.2), dans un espace de noms propre à Tessel.
+/// Signature label of the certificate, modeled on `SignWithLabel` (RFC 9420,
+/// §5.1.2), in a namespace specific to Tessel.
 const CERTIFICATE_LABEL: &[u8] = b"Tessel 1.0 DeviceCertificate";
 
-/// Version du format du certificat.
+/// Certificate format version.
 const CERTIFICATE_VERSION: u8 = 1;
 
-/// Taille d'une clé publique Ed25519.
+/// Size of an Ed25519 public key.
 const PUBLIC_KEY_LEN: usize = 32;
 
-/// Taille d'une signature Ed25519.
+/// Size of an Ed25519 signature.
 const SIGNATURE_LEN: usize = 64;
 
 type PublicKey = [u8; PUBLIC_KEY_LEN];
 
-/// Ce que l'identité peut refuser.
+/// What identity handling can reject.
 #[derive(Debug, thiserror::Error, PartialEq, Eq)]
 pub enum IdentityError {
-    /// Le compte n'est pas un `pseudo@domaine` valide (ADR-002).
+    /// The account is not a valid `name@domain` (ADR-002).
     #[error("invalid account: {0}")]
     InvalidAccount(&'static str),
-    /// Le fournisseur crypto a échoué (aléa, génération ou signature).
+    /// The crypto provider failed (randomness, key generation or signing).
     #[error("crypto provider failure")]
     Crypto,
-    /// Une clé publique n'a pas la taille d'une clé Ed25519.
+    /// A public key does not have the size of an Ed25519 key.
     #[error("invalid public key")]
     InvalidKey,
-    /// Le certificat n'est pas décodable, ou dans une version inconnue.
+    /// The certificate cannot be decoded, or is in an unknown version.
     #[error("malformed device certificate")]
     MalformedCertificate,
-    /// La signature du certificat ne vérifie pas avec la clé de compte annoncée.
+    /// The certificate signature does not verify with the announced account key.
     #[error("device certificate signature does not verify")]
     BadSignature,
-    /// La clé de signature de l'appareil n'est pas celle que le certificat certifie.
+    /// The device signing key is not the one the certificate certifies.
     #[error("device key does not match its certificate")]
     KeyMismatch,
-    /// Le *credential* MLS n'est pas un *BasicCredential*.
+    /// The MLS *credential* is not a *BasicCredential*.
     #[error("not a basic credential")]
     NotBasicCredential,
 }
 
-/// Un compte : `pseudo@domaine` (ADR-002).
+/// An account: `name@domain` (ADR-002).
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub struct AccountId {
     name: String,
@@ -79,9 +80,9 @@ pub struct AccountId {
 }
 
 impl AccountId {
-    /// Lit et valide `pseudo@domaine`. Le pseudo : 3 à 32 caractères parmi `a-z`,
-    /// `0-9`, `.`, `_`, `-`, une lettre en premier. Le domaine : un nom d'hôte en
-    /// minuscules (étiquettes `a-z`, `0-9`, `-`).
+    /// Parses and validates `name@domain`. The name: 3 to 32 characters among `a-z`,
+    /// `0-9`, `.`, `_`, `-`, starting with a letter. The domain: a lowercase host
+    /// name (labels `a-z`, `0-9`, `-`).
     pub fn parse(value: &str) -> Result<Self, IdentityError> {
         let (name, domain) = value
             .split_once('@')
@@ -94,12 +95,12 @@ impl AccountId {
         })
     }
 
-    /// Le pseudo.
+    /// The name.
     pub fn name(&self) -> &str {
         &self.name
     }
 
-    /// Le domaine de l'instance.
+    /// The instance domain.
     pub fn domain(&self) -> &str {
         &self.domain
     }
@@ -164,12 +165,12 @@ impl fmt::Debug for AccountId {
     }
 }
 
-/// Identifiant d'appareil : 128 bits aléatoires, unique dans son compte (ADR-002).
+/// Device identifier: 128 random bits, unique within its account (ADR-002).
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub struct DeviceId([u8; 16]);
 
 impl DeviceId {
-    /// Tire un identifiant au hasard.
+    /// Draws a random identifier.
     pub fn random() -> Result<Self, IdentityError> {
         RustCrypto::default()
             .random_array()
@@ -177,12 +178,12 @@ impl DeviceId {
             .map_err(|_| IdentityError::Crypto)
     }
 
-    /// Reprend un identifiant connu.
+    /// Restores a known identifier.
     pub fn from_bytes(bytes: [u8; 16]) -> Self {
         Self(bytes)
     }
 
-    /// Les 16 octets de l'identifiant.
+    /// The 16 bytes of the identifier.
     pub fn as_bytes(&self) -> &[u8; 16] {
         &self.0
     }
@@ -200,7 +201,7 @@ impl fmt::Debug for DeviceId {
     }
 }
 
-/// Une paire de clés Ed25519 dont la moitié privée ne sort pas du crate.
+/// An Ed25519 key pair whose private half never leaves the crate.
 struct SigningKey {
     private: Zeroizing<Vec<u8>>,
     public: Vec<u8>,
@@ -232,23 +233,23 @@ impl fmt::Debug for SigningKey {
     }
 }
 
-/// La clé d'identité d'un compte. Elle signe les certificats de ses appareils.
+/// The identity key of an account. It signs the certificates of its devices.
 #[derive(Debug)]
 pub struct AccountKey(SigningKey);
 
 impl AccountKey {
-    /// Crée une nouvelle clé de compte.
+    /// Creates a new account key.
     pub fn generate() -> Result<Self, IdentityError> {
         SigningKey::generate().map(Self)
     }
 
-    /// La clé publique, que l'annuaire publie et que les codes de sécurité comparent.
+    /// The public key, which the directory publishes and the security codes compare.
     pub fn public_key(&self) -> &[u8] {
         &self.0.public
     }
 
-    /// Certifie qu'un appareil appartient au compte. `device_key` est la clé publique
-    /// de signature de l'appareil (sur le nouvel appareil : [`DeviceKey::public_key`]).
+    /// Certifies that a device belongs to the account. `device_key` is the device's
+    /// public signing key (on the new device: [`DeviceKey::public_key`]).
     pub fn certify(
         &self,
         account: &AccountId,
@@ -268,25 +269,25 @@ impl AccountKey {
     }
 }
 
-/// La clé de signature MLS d'un appareil, avant qu'il soit certifié.
+/// The MLS signing key of a device, before it is certified.
 #[derive(Debug)]
 pub struct DeviceKey(SigningKey);
 
 impl DeviceKey {
-    /// Crée une nouvelle clé d'appareil.
+    /// Creates a new device key.
     pub fn generate() -> Result<Self, IdentityError> {
         SigningKey::generate().map(Self)
     }
 
-    /// La clé publique, à faire certifier par la clé du compte.
+    /// The public key, to be certified by the account key.
     pub fn public_key(&self) -> &[u8] {
         &self.0.public
     }
 }
 
-/// Le contenu signé d'un certificat. Les clés et la signature ont une taille fixe ;
-/// seul le compte a une longueur, sur 16 bits. (Les vecteurs à longueur variable de
-/// tls_codec 0.5, `VLBytes`, paniquent en debug sur une entrée tronquée.)
+/// The signed content of a certificate. Keys and signature have a fixed size; only
+/// the account has a length, on 16 bits. (The variable-length vectors of tls_codec
+/// 0.5, `VLBytes`, panic in debug builds on a truncated input.)
 #[derive(TlsSerialize, TlsDeserializeBytes, TlsSize)]
 struct CertificateContent {
     version: u8,
@@ -296,7 +297,7 @@ struct CertificateContent {
     device_key: PublicKey,
 }
 
-/// Le certificat tel qu'il voyage dans le *BasicCredential*.
+/// The certificate as it travels in the *BasicCredential*.
 #[derive(TlsSerialize, TlsDeserializeBytes, TlsSize)]
 struct CertificateWire {
     content: CertificateContent,
@@ -307,15 +308,15 @@ fn public_key(bytes: &[u8]) -> Result<PublicKey, IdentityError> {
     bytes.try_into().map_err(|_| IdentityError::InvalidKey)
 }
 
-/// `SignContent` de RFC 9420, §5.1.2.
+/// `SignContent` of RFC 9420, §5.1.2.
 #[derive(TlsSerialize, TlsSize)]
 struct SignContent<'a> {
     label: VLByteSlice<'a>,
     content: VLByteSlice<'a>,
 }
 
-/// Le certificat d'un appareil : la clé de compte atteste que la clé de signature
-/// `device_key` est celle de l'appareil `device_id` du compte `account`.
+/// A device certificate: the account key attests that the signing key `device_key`
+/// is the one of device `device_id` of account `account`.
 #[derive(Clone, PartialEq, Eq)]
 pub struct DeviceCertificate {
     account: AccountId,
@@ -326,22 +327,22 @@ pub struct DeviceCertificate {
 }
 
 impl DeviceCertificate {
-    /// Le compte annoncé.
+    /// The announced account.
     pub fn account(&self) -> &AccountId {
         &self.account
     }
 
-    /// L'appareil.
+    /// The device.
     pub fn device_id(&self) -> DeviceId {
         self.device_id
     }
 
-    /// La clé de compte qui a signé : à comparer à celle que l'on connaît du compte.
+    /// The account key that signed: to compare with the one known for the account.
     pub fn account_key(&self) -> &[u8] {
         &self.account_key
     }
 
-    /// La clé de signature MLS de l'appareil.
+    /// The device's MLS signing key.
     pub fn device_key(&self) -> &[u8] {
         &self.device_key
     }
@@ -369,7 +370,7 @@ impl DeviceCertificate {
         .map_err(|_| IdentityError::MalformedCertificate)
     }
 
-    /// Vérifie la signature du certificat avec la clé de compte qu'il annonce.
+    /// Verifies the certificate signature with the account key it announces.
     pub fn verify(&self) -> Result<(), IdentityError> {
         RustCrypto::default()
             .verify_signature(
@@ -381,7 +382,7 @@ impl DeviceCertificate {
             .map_err(|_| IdentityError::BadSignature)
     }
 
-    /// Le certificat sérialisé (TLS), tel qu'il voyage.
+    /// The serialized certificate (TLS), as it travels.
     pub fn to_bytes(&self) -> Result<Vec<u8>, IdentityError> {
         CertificateWire {
             content: self.content(),
@@ -391,7 +392,7 @@ impl DeviceCertificate {
         .map_err(|_| IdentityError::MalformedCertificate)
     }
 
-    /// Lit un certificat sérialisé, sans le vérifier : voir [`DeviceCertificate::verify`].
+    /// Parses a serialized certificate without verifying it: see [`DeviceCertificate::verify`].
     pub fn from_bytes(bytes: &[u8]) -> Result<Self, IdentityError> {
         const MALFORMED: IdentityError = IdentityError::MalformedCertificate;
         if bytes.first() != Some(&CERTIFICATE_VERSION) {
@@ -414,14 +415,14 @@ impl DeviceCertificate {
         })
     }
 
-    /// Le *credential* MLS de l'appareil : un *BasicCredential* qui porte le certificat.
+    /// The device's MLS *credential*: a *BasicCredential* carrying the certificate.
     pub fn to_credential(&self) -> Result<Credential, IdentityError> {
         Ok(BasicCredential::new(self.to_bytes()?).into())
     }
 
-    /// Ce que fait tout membre d'un groupe devant la feuille d'un appareil : lire le
-    /// certificat de son *credential*, vérifier la signature du compte, et vérifier que
-    /// la clé de signature de la feuille est celle que le certificat certifie.
+    /// What every group member does when facing a device's leaf: read the certificate
+    /// from its *credential*, verify the account signature, and verify that the leaf's
+    /// signing key is the one the certificate certifies.
     pub fn from_credential(
         credential: &Credential,
         signature_key: &[u8],
@@ -446,7 +447,7 @@ impl fmt::Debug for DeviceCertificate {
     }
 }
 
-/// Un appareil certifié : sa clé de signature MLS et son certificat.
+/// A certified device: its MLS signing key and its certificate.
 #[derive(Debug)]
 pub struct Device {
     key: DeviceKey,
@@ -454,16 +455,17 @@ pub struct Device {
 }
 
 impl Device {
-    /// Le premier appareil d'un compte : il tire son identifiant, crée sa clé et la
-    /// fait certifier par la clé du compte qu'il détient.
+    /// The first device of an account: it draws its identifier, creates its key and has
+    /// it certified by the account key it holds.
     pub fn create(account: &AccountId, account_key: &AccountKey) -> Result<Self, IdentityError> {
         let key = DeviceKey::generate()?;
         let certificate = account_key.certify(account, DeviceId::random()?, key.public_key())?;
         Self::new(key, certificate)
     }
 
-    /// Assemble une clé d'appareil et le certificat reçu pour elle (ajout d'un appareil
-    /// par QR, story 03-04). Refuse un certificat invalide ou fait pour une autre clé.
+    /// Assembles a device key and the certificate received for it (adding a device by
+    /// QR code, story 03-04). Rejects an invalid certificate or one made for another
+    /// key.
     pub fn new(key: DeviceKey, certificate: DeviceCertificate) -> Result<Self, IdentityError> {
         certificate.verify()?;
         if certificate.device_key.as_slice() != key.public_key() {
@@ -472,12 +474,12 @@ impl Device {
         Ok(Self { key, certificate })
     }
 
-    /// Le certificat de l'appareil.
+    /// The device's certificate.
     pub fn certificate(&self) -> &DeviceCertificate {
         &self.certificate
     }
 
-    /// Le *credential* et la clé publique que l'appareil présente dans ses groupes MLS.
+    /// The *credential* and public key the device presents in its MLS groups.
     pub fn credential_with_key(&self) -> Result<CredentialWithKey, IdentityError> {
         Ok(CredentialWithKey {
             credential: self.certificate.to_credential()?,
@@ -486,7 +488,7 @@ impl Device {
     }
 }
 
-/// L'appareil signe ses messages MLS ; OpenMLS ne voit que ce trait, jamais la clé.
+/// The device signs its MLS messages; OpenMLS only sees this trait, never the key.
 impl Signer for Device {
     fn sign(&self, payload: &[u8]) -> Result<Vec<u8>, SignerError> {
         self.key

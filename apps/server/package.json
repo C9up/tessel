@@ -2,7 +2,7 @@
   "name": "@tessel/server",
   "version": "0.1.0",
   "private": true,
-  "description": "Serveur Tessel : facteur aveugle (API comet, temps réel relay) et coquille web.",
+  "description": "Tessel server: blind postman (comet API, relay real time) and web shell.",
   "type": "module",
   "imports": {
     "#app/*": "./app/*",

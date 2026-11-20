@@ -7,7 +7,7 @@ export default defineConfig({
     main: {
       url: env.get('REDIS_URL'),
       maxRetriesPerRequest: null,
-      // Connexion à la première commande : bâtir le client n'ouvre aucun socket.
+      // Connects on the first command: building the client opens no socket.
       lazyConnect: true,
     },
   },

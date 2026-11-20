@@ -1,35 +1,35 @@
-//! Messages applicatifs (story 02-05).
+//! Application messages (story 02-05).
 //!
-//! Ce que les membres d'un groupe s'envoient, une fois déchiffré : texte, média, accusé,
-//! édition, suppression. Le serveur n'en voit rien ; il ne voit que la taille du message
-//! chiffré, que le remplissage brouille.
+//! What the members of a group send each other, once decrypted: text, media, receipt,
+//! edit, deletion. The server sees none of it; it only sees the size of the encrypted
+//! message, which the padding blurs.
 //!
 //! # Format (version 1)
 //!
-//! Entiers en gros-boutiste, comme en TLS. Chaque champ variable est précédé de sa
-//! longueur ; rien n'est implicite, donc un message se lit sans ambiguïté.
+//! Integers are big-endian, as in TLS. Every variable-length field is preceded by its
+//! length; nothing is implicit, so a message reads without ambiguity.
 //!
 //! ```text
 //! u8   version          (1)
-//! u8   genre            (1 texte, 2 média, 3 accusé, 4 édition, 5 suppression)
-//! [16] identifiant      (tiré au hasard par l'expéditeur)
-//! u64  envoyé à         (millisecondes depuis l'époque Unix, horloge de l'expéditeur)
-//! ...  corps            (selon le genre)
-//! ...  remplissage      (des zéros, jusqu'à la taille de son palier)
+//! u8   kind             (1 text, 2 media, 3 receipt, 4 edit, 5 deletion)
+//! [16] identifier       (drawn at random by the sender)
+//! u64  sent at          (milliseconds since the Unix epoch, sender's clock)
+//! ...  body             (depends on the kind)
+//! ...  padding          (zeros, up to the size of its bucket)
 //! ```
 //!
-//! Le décodage est strict : version inconnue, genre inconnu, longueur qui déborde,
-//! UTF-8 invalide, remplissage non nul ou de la mauvaise taille, tout est refusé avec une
-//! erreur, jamais une panique. Le lecteur est écrit à la main (sans `tls_codec`, dont
-//! `VLBytes` panique en debug sur une entrée tronquée) et ne fait que des lectures bornées.
+//! Decoding is strict: unknown version, unknown kind, overflowing length, invalid UTF-8,
+//! padding that is nonzero or of the wrong size, everything is rejected with an error,
+//! never a panic. The reader is hand-written (without `tls_codec`, whose `VLBytes`
+//! panics in debug builds on truncated input) and only performs bounded reads.
 //!
-//! # Remplissage
+//! # Padding
 //!
-//! Le message encodé est complété par des zéros jusqu'à au moins [`MIN_PADDED`] octets,
-//! puis jusqu'au palier Padmé de sa taille (Nikitin et al., *Reducing Metadata Leakage
-//! from Encrypted Files and Communication with PURBs*, PETS 2019) : au plus 12 % de
-//! surcoût, et la taille ne trahit qu'un ordre de grandeur. Tous les messages courts
-//! (« ok », « j'arrive ») ont la même taille chiffrée.
+//! The encoded message is completed with zeros up to at least [`MIN_PADDED`] bytes, then
+//! up to the `Padmé` bucket of its size (Nikitin et al., *Reducing Metadata Leakage from
+//! Encrypted Files and Communication with PURBs*, PETS 2019): at most 12% overhead, and
+//! the size only betrays an order of magnitude. All short messages ("ok", "on my way")
+//! have the same encrypted size.
 
 use std::fmt;
 
@@ -37,19 +37,19 @@ use openmls_rust_crypto::RustCrypto;
 use openmls_traits::random::OpenMlsRand;
 use zeroize::Zeroizing;
 
-/// Version du format écrit par ce cœur.
+/// Version of the format written by this core.
 pub const MESSAGE_VERSION: u8 = 1;
 
-/// Taille minimale d'un message encodé, remplissage compris.
+/// Minimum size of an encoded message, padding included.
 pub const MIN_PADDED: usize = 256;
 
-/// Longueur maximale d'un texte, d'une légende ou d'une édition, en octets UTF-8.
+/// Maximum length of a text, a caption or an edit, in UTF-8 bytes.
 pub const MAX_TEXT: usize = u16::MAX as usize;
 
-/// Nombre maximal de messages qu'un accusé couvre.
+/// Maximum number of messages a receipt covers.
 pub const MAX_RECEIPT: usize = 256;
 
-/// Longueur maximale de l'identifiant d'un blob, du type d'un média, de son nom.
+/// Maximum length of a blob identifier, of a media's content type, of its name.
 const MAX_BLOB_ID: usize = 64;
 const MAX_CONTENT_TYPE: usize = 127;
 const MAX_FILE_NAME: usize = 255;
@@ -60,32 +60,32 @@ const KIND_RECEIPT: u8 = 3;
 const KIND_EDIT: u8 = 4;
 const KIND_DELETE: u8 = 5;
 
-/// Ce que le format peut refuser.
+/// What the format can reject.
 #[derive(Debug, Clone, thiserror::Error, PartialEq, Eq)]
 pub enum MessageError {
-    /// Un message d'une version plus récente que ce cœur : l'appli invite à se mettre à jour.
+    /// A message of a newer version than this core: the app prompts the user to update.
     #[error("unsupported message version {0}")]
     UnsupportedVersion(u8),
-    /// Un genre de message que ce cœur ne connaît pas encore.
+    /// A message kind this core does not know yet.
     #[error("unknown message kind {0}")]
     UnknownKind(u8),
-    /// Le message est tronqué, déborde ou viole une règle du format.
+    /// The message is truncated, overflows or violates a rule of the format.
     #[error("malformed message")]
     Malformed,
-    /// Le message à envoyer viole une règle du format (texte vide ou trop long…).
+    /// The message to send violates a rule of the format (empty or too long text…).
     #[error("invalid message: {0}")]
     Invalid(&'static str),
-    /// Pas d'aléa pour tirer l'identifiant.
+    /// No randomness available to draw the identifier.
     #[error("no randomness")]
     NoRandomness,
 }
 
-/// L'identifiant d'un message, tiré au hasard par son expéditeur.
+/// A message's identifier, drawn at random by its sender.
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub struct MessageId([u8; 16]);
 
 impl MessageId {
-    /// Tire un identifiant au hasard.
+    /// Draws an identifier at random.
     pub fn random() -> Result<Self, MessageError> {
         RustCrypto::default()
             .random_array()
@@ -93,12 +93,12 @@ impl MessageId {
             .map_err(|_| MessageError::NoRandomness)
     }
 
-    /// Reprend un identifiant connu.
+    /// Wraps a known identifier.
     pub fn from_bytes(bytes: [u8; 16]) -> Self {
         Self(bytes)
     }
 
-    /// Les 16 octets de l'identifiant.
+    /// The identifier's 16 bytes.
     pub fn as_bytes(&self) -> &[u8; 16] {
         &self.0
     }
@@ -116,14 +116,14 @@ impl fmt::Debug for MessageId {
     }
 }
 
-/// La clé d'un média (story 02-08) : elle voyage dans le message chiffré, jamais à part,
-/// et s'efface de la mémoire à la libération.
+/// A media key (story 02-08): it travels inside the encrypted message, never separately,
+/// and is wiped from memory when dropped.
 #[derive(Clone, PartialEq, Eq)]
 pub struct MediaKey(Zeroizing<[u8; 32]>);
 
 impl MediaKey {
-    // Seuls le décodage et le chiffrement des médias (story 02-08) créent et lisent une
-    // clé ; aucune fonction publique ne la rend.
+    // Only media decoding and encryption (story 02-08) create and read a key; no public
+    // function returns it.
     pub(crate) fn from_bytes(bytes: [u8; 32]) -> Self {
         Self(Zeroizing::new(bytes))
     }
@@ -139,92 +139,92 @@ impl fmt::Debug for MediaKey {
     }
 }
 
-/// Un média déposé chiffré sur le serveur (story 02-08) : de quoi le retrouver, le
-/// déchiffrer et vérifier qu'il n'a pas été modifié.
+/// A media stored encrypted on the server (story 02-08): what is needed to find it,
+/// decrypt it and verify it was not modified.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MediaRef {
-    /// L'identifiant du blob chiffré sur le serveur (1 à 64 octets).
+    /// The identifier of the encrypted blob on the server (1 to 64 bytes).
     pub blob: Vec<u8>,
-    /// La clé du blob.
+    /// The blob's key.
     pub key: MediaKey,
-    /// L'empreinte SHA-256 du blob chiffré.
+    /// The SHA-256 digest of the encrypted blob.
     pub digest: [u8; 32],
-    /// La taille du fichier en clair, en octets.
+    /// The size of the plaintext file, in bytes.
     pub size: u64,
-    /// Son type (`image/jpeg`…), 127 octets au plus.
+    /// Its content type (`image/jpeg`…), 127 bytes at most.
     pub content_type: String,
-    /// Son nom, 255 octets au plus ; vide s'il n'en a pas.
+    /// Its name, 255 bytes at most; empty if it has none.
     pub name: String,
 }
 
-/// Ce qu'un accusé atteste.
+/// What a receipt attests.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ReceiptKind {
-    /// Le message est arrivé sur l'appareil.
+    /// The message arrived on the device.
     Delivered,
-    /// Le message a été lu.
+    /// The message was read.
     Read,
 }
 
-/// Le corps d'un message.
+/// A message's body.
 ///
-/// Une édition ou une suppression vise un message par son identifiant ; seul l'auteur
-/// du message visé peut le changer. Ce cœur ne garde pas encore l'historique : la
-/// vérification se fera avec la base locale (story 02-06), en comparant l'expéditeur
-/// des deux messages.
+/// An edit or a deletion targets a message by its identifier; only the author of the
+/// targeted message can change it. This core does not keep the history yet: the check
+/// will be done with the local database (story 02-06), by comparing the senders of the
+/// two messages.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Body {
-    /// Un texte, éventuellement en réponse à un autre message.
+    /// A text, possibly in reply to another message.
     Text {
-        /// Le texte, 1 à [`MAX_TEXT`] octets.
+        /// The text, 1 to [`MAX_TEXT`] bytes.
         text: String,
-        /// Le message auquel il répond.
+        /// The message it replies to.
         reply_to: Option<MessageId>,
     },
-    /// Un média, avec une légende, éventuellement en réponse à un autre message.
+    /// A media, with a caption, possibly in reply to another message.
     Media {
-        /// Le média.
+        /// The media.
         media: MediaRef,
-        /// La légende, vide s'il n'y en a pas.
+        /// The caption, empty if there is none.
         caption: String,
-        /// Le message auquel il répond.
+        /// The message it replies to.
         reply_to: Option<MessageId>,
     },
-    /// Un accusé de réception ou de lecture.
+    /// A delivery or read receipt.
     Receipt {
-        /// Réception ou lecture.
+        /// Delivery or read.
         kind: ReceiptKind,
-        /// Les messages accusés, 1 à [`MAX_RECEIPT`].
+        /// The acknowledged messages, 1 to [`MAX_RECEIPT`].
         messages: Vec<MessageId>,
     },
-    /// Le nouveau texte d'un message.
+    /// A message's new text.
     Edit {
-        /// Le message édité.
+        /// The edited message.
         target: MessageId,
-        /// Son nouveau texte, 1 à [`MAX_TEXT`] octets.
+        /// Its new text, 1 to [`MAX_TEXT`] bytes.
         text: String,
     },
-    /// La suppression d'un message, pour tous.
+    /// The deletion of a message, for everyone.
     Delete {
-        /// Le message supprimé.
+        /// The deleted message.
         target: MessageId,
     },
 }
 
-/// Un message applicatif.
+/// An application message.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Message {
-    /// Son identifiant.
+    /// Its identifier.
     pub id: MessageId,
-    /// Quand il a été envoyé, en millisecondes depuis l'époque Unix, selon l'horloge de
-    /// l'expéditeur (qui peut mentir : seul l'ordre du serveur fait foi).
+    /// When it was sent, in milliseconds since the Unix epoch, according to the sender's
+    /// clock (which can lie: only the server's order is authoritative).
     pub sent_at: u64,
-    /// Son corps.
+    /// Its body.
     pub body: Body,
 }
 
 impl Message {
-    /// Un nouveau message, avec un identifiant tiré au hasard.
+    /// A new message, with a randomly drawn identifier.
     pub fn new(sent_at: u64, body: Body) -> Result<Self, MessageError> {
         Ok(Self {
             id: MessageId::random()?,
@@ -233,7 +233,7 @@ impl Message {
         })
     }
 
-    /// Encode le message, remplissage compris.
+    /// Encodes the message, padding included.
     pub fn encode(&self) -> Result<Vec<u8>, MessageError> {
         self.validate().map_err(MessageError::Invalid)?;
         let mut out = Writer(Vec::with_capacity(MIN_PADDED));
@@ -281,8 +281,8 @@ impl Message {
         Ok(bytes)
     }
 
-    /// Décode un message reçu ; refuse, sans paniquer, tout ce qui n'est pas un message
-    /// valide de ce format.
+    /// Decodes a received message; rejects, without panicking, anything that is not a
+    /// valid message of this format.
     pub fn decode(bytes: &[u8]) -> Result<Self, MessageError> {
         let mut input = Reader(bytes);
         let version = input.u8()?;
@@ -338,8 +338,8 @@ impl Message {
             },
         };
 
-        // Le remplissage : rien que des zéros, et exactement jusqu'au palier du contenu.
-        // Une seule écriture possible par message, donc pas de canal caché.
+        // The padding: nothing but zeros, and exactly up to the content's bucket. Only
+        // one possible encoding per message, hence no covert channel.
         let content = bytes.len() - input.0.len();
         if bytes.len() != padded_len(content) || input.0.iter().any(|&b| b != 0) {
             return Err(MessageError::Malformed);
@@ -350,7 +350,7 @@ impl Message {
         Ok(message)
     }
 
-    /// Les règles que l'encodage ne garantit pas à lui seul.
+    /// The rules that the encoding does not guarantee on its own.
     fn validate(&self) -> Result<(), &'static str> {
         fn text(text: &str, max: usize, empty_ok: bool) -> Result<(), &'static str> {
             match text.len() {
@@ -391,14 +391,14 @@ impl Body {
     }
 }
 
-/// La taille d'un message de `len` octets une fois rempli : au moins [`MIN_PADDED`],
-/// puis le palier Padmé.
+/// The size of a `len`-byte message once padded: at least [`MIN_PADDED`], then the
+/// `Padmé` bucket.
 pub(crate) fn padded_len(len: usize) -> usize {
     padme(len.max(MIN_PADDED))
 }
 
-/// Padmé : arrondit `len` en ne gardant que ses `⌊log2 ⌊log2 len⌋⌋ + 1` bits de poids
-/// fort ; les bits suivants sont mis à zéro et la valeur arrondie vers le haut.
+/// `Padmé`: rounds `len` by keeping only its `⌊log2 ⌊log2 len⌋⌋ + 1` most significant
+/// bits; the following bits are set to zero and the value is rounded up.
 fn padme(len: usize) -> usize {
     if len < 2 {
         return len;
@@ -454,7 +454,7 @@ impl Writer {
     }
 }
 
-/// Un lecteur qui ne lit jamais au-delà de ce qu'il reste.
+/// A reader that never reads beyond what remains.
 struct Reader<'a>(&'a [u8]);
 
 impl<'a> Reader<'a> {

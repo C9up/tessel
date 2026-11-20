@@ -6,13 +6,13 @@ import { outboxRelay } from '#modules/shared/infrastructure/outboxRelay.js'
 
 const APP_ROOT = new URL('../', import.meta.url)
 
-// PORT n'est pas lu ici : `#start/env` charge `.env` dans `booting()`, et l'Ignitor
-// lit le port au moment de se lier.
+// PORT is not read here: `#start/env` loads `.env` in `booting()`, and the Ignitor
+// reads the port when it binds.
 new Ignitor(APP_ROOT, {
   serverFactory: createHyperServerFactory(),
 })
   .tap((app) => {
-    // Valider l'environnement avant tout démarrage : une APP_KEY absente arrête l'app ici.
+    // Validate the environment before anything starts: a missing APP_KEY stops the app here.
     app.booting(async () => {
       await import('#start/env.js')
     })
@@ -21,7 +21,7 @@ new Ignitor(APP_ROOT, {
   .httpServer()
   .start()
   .then(async (app) => {
-    // L'outbox et son relais ne tournent que dans le vrai serveur, jamais sous le harnais de test.
+    // The outbox and its relay run only in the real server, never under the test harness.
     setOutboxActive(true)
     outboxRelay.start()
     console.log(`\n  ➜ Tessel ready on http://${app.host()}:${await app.port()}\n`)

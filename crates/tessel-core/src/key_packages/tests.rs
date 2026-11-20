@@ -7,7 +7,7 @@ use super::*;
 use crate::client::Client;
 use crate::identity::{AccountId, AccountKey};
 
-/// La vérification d'un *KeyPackage* lit l'horloge réelle : les tests partent de maintenant.
+/// Verifying a *KeyPackage* reads the real clock: the tests start from now.
 fn now() -> u64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -21,7 +21,7 @@ fn client() -> Client {
 }
 
 fn consume(client: &Client, key_package: &VerifiedKeyPackage) {
-    // Ce que fait OpenMLS quand un *Welcome* utilise le *KeyPackage*.
+    // What OpenMLS does when a *Welcome* uses the *KeyPackage*.
     client
         .provider()
         .storage()
@@ -30,7 +30,7 @@ fn consume(client: &Client, key_package: &VerifiedKeyPackage) {
 }
 
 #[test]
-fn le_premier_renouvellement_remplit_la_reserve_et_le_dernier_recours() {
+fn the_first_renewal_fills_the_pool_and_the_last_resort() {
     let mut client = client();
     let update = client.refresh_key_packages(now()).unwrap();
     assert_eq!(update.publish.len(), KEY_PACKAGE_POOL);
@@ -43,10 +43,10 @@ fn le_premier_renouvellement_remplit_la_reserve_et_le_dernier_recours() {
     assert_eq!(
         one_time.certificate(),
         client.device().certificate(),
-        "le KeyPackage porte le certificat de l'appareil"
+        "the KeyPackage carries the device certificate"
     );
 
-    // Rien ne change tant que rien n'est consommé ni proche de sa fin.
+    // Nothing changes as long as nothing is consumed or close to its end.
     assert!(
         client
             .refresh_key_packages(now() + 3600)
@@ -56,7 +56,7 @@ fn le_premier_renouvellement_remplit_la_reserve_et_le_dernier_recours() {
 }
 
 #[test]
-fn un_keypackage_consomme_est_remplace() {
+fn a_consumed_keypackage_is_replaced() {
     let mut client = client();
     let first = client.refresh_key_packages(now()).unwrap();
     let used = verify_key_package(&first.publish[3]).unwrap();
@@ -65,11 +65,14 @@ fn un_keypackage_consomme_est_remplace() {
     let update = client.refresh_key_packages(now() + 60).unwrap();
     assert_eq!(update.publish.len(), 1);
     assert!(update.last_resort.is_none());
-    assert!(update.withdraw.is_empty(), "le serveur l'a déjà donné");
+    assert!(
+        update.withdraw.is_empty(),
+        "the server already handed it out"
+    );
 }
 
 #[test]
-fn un_keypackage_proche_de_sa_fin_est_retire_remplace_puis_efface() {
+fn a_keypackage_near_its_end_is_withdrawn_replaced_then_wiped() {
     let mut client = client();
     let first = client.refresh_key_packages(now()).unwrap();
     let published: Vec<VerifiedKeyPackage> = first
@@ -88,7 +91,7 @@ fn un_keypackage_proche_de_sa_fin_est_retire_remplace_puis_efface() {
         assert!(update.withdraw.contains(&key_package.reference().to_vec()));
     }
 
-    // Retirés mais pas encore expirés : un Welcome en route peut encore les utiliser.
+    // Withdrawn but not yet expired: a Welcome in flight may still use them.
     let stored = |client: &Client, k: &VerifiedKeyPackage| {
         client
             .provider()
@@ -99,7 +102,7 @@ fn un_keypackage_proche_de_sa_fin_est_retire_remplace_puis_efface() {
     };
     assert!(published.iter().all(|k| stored(&client, k)));
 
-    // Après leur fin de validité, leurs secrets sont effacés, sans rien renvoyer au serveur.
+    // After their validity ends, their secrets are wiped, without sending anything to the server.
     let update = client
         .refresh_key_packages(now() + KEY_PACKAGE_LIFETIME)
         .unwrap();
@@ -108,7 +111,7 @@ fn un_keypackage_proche_de_sa_fin_est_retire_remplace_puis_efface() {
 }
 
 #[test]
-fn un_keypackage_d_une_autre_suite_est_refuse() {
+fn a_keypackage_of_another_suite_is_rejected() {
     let client = client();
     let device = client.device();
     let bundle = KeyPackage::builder()
@@ -129,12 +132,12 @@ fn un_keypackage_d_une_autre_suite_est_refuse() {
 }
 
 #[test]
-fn un_keypackage_altere_est_refuse() {
+fn a_tampered_keypackage_is_rejected() {
     let mut client = client();
     let update = client.refresh_key_packages(now()).unwrap();
     let mut bytes = update.publish[0].clone();
     let last = bytes.len() - 1;
-    bytes[last] ^= 1; // dans la signature
+    bytes[last] ^= 1; // inside the signature
     assert!(matches!(
         verify_key_package(&bytes),
         Err(KeyPackageError::Invalid(_))
