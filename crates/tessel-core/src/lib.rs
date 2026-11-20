@@ -4,11 +4,13 @@
 //! web (WASM) comme pour le mobile (natif). Aucune clé privée ne sort de ce crate.
 
 mod client;
+mod groups;
 mod identity;
 mod key_packages;
 mod suite;
 
 pub use client::Client;
+pub use groups::{GroupError, GroupId, Incoming, Outgoing, Removal};
 pub use identity::{
     AccountId, AccountKey, Device, DeviceCertificate, DeviceId, DeviceKey, IdentityError,
 };

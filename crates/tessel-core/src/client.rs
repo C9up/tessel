@@ -1,19 +1,24 @@
-//! Le client : un appareil certifié, son état MLS et sa réserve de *KeyPackages*.
+//! Le client : un appareil certifié, son état MLS, ses groupes et sa réserve de
+//! *KeyPackages*.
 //!
 //! L'état vit pour l'instant en mémoire ; la base locale chiffrée (story 02-06) le
 //! rendra durable.
 
+use std::collections::HashMap;
+
 use openmls_rust_crypto::OpenMlsRustCrypto;
 
+use crate::groups::{Group, GroupId};
 use crate::identity::Device;
 use crate::key_packages::{KeyPackageError, KeyPackagePool, KeyPackageUpdate};
 
 /// Un appareil Tessel en fonctionnement.
 #[derive(Debug)]
 pub struct Client {
-    provider: OpenMlsRustCrypto,
-    device: Device,
+    pub(crate) provider: OpenMlsRustCrypto,
+    pub(crate) device: Device,
     key_packages: KeyPackagePool,
+    pub(crate) groups: HashMap<GroupId, Group>,
 }
 
 impl Client {
@@ -23,6 +28,7 @@ impl Client {
             provider: OpenMlsRustCrypto::default(),
             device,
             key_packages: KeyPackagePool::default(),
+            groups: HashMap::new(),
         }
     }
 

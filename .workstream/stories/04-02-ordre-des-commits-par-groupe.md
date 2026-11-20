@@ -19,6 +19,7 @@ Un seul commit gagne par epoch, pour que tous les membres restent d'accord.
 
 - Un verrou par groupe (`eclipse`) n'accepte qu'un commit par epoch ; les autres reçoivent un refus nommé.
 - Les messages reçoivent un numéro de séquence par groupe.
+- L'auteur d'un commit reçoit « accepté » ou « refusé », jamais son propre commit : chiffré (`PrivateMessage`), il ne peut pas le relire (`commit_accepted` / `commit_rejected` du cœur, story 02-04).
 - Test de concurrence : deux commits simultanés, un seul accepté, l'autre rejoué par le client.
 
 ## Reviews

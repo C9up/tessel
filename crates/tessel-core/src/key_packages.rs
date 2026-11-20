@@ -188,7 +188,7 @@ fn create(
 
 /// Ce que la feuille d'un appareil Tessel déclare savoir faire : la seule suite de
 /// Tessel, et l'extension *last_resort* qu'un *KeyPackage* de dernier recours porte.
-fn capabilities() -> Capabilities {
+pub(crate) fn capabilities() -> Capabilities {
     Capabilities::builder()
         .ciphersuites(vec![CIPHERSUITE])
         .extensions(vec![ExtensionType::LastResort])
@@ -199,8 +199,6 @@ fn capabilities() -> Capabilities {
 /// et certificat de l'appareil.
 #[derive(Debug, Clone)]
 pub struct VerifiedKeyPackage {
-    // Gardé pour l'ajout à un groupe (story 02-04).
-    #[allow(dead_code)]
     key_package: KeyPackage,
     certificate: DeviceCertificate,
     reference: KeyPackageRef,
@@ -216,6 +214,10 @@ impl VerifiedKeyPackage {
     /// Sa référence (`KeyPackageRef`).
     pub fn reference(&self) -> &[u8] {
         self.reference.as_slice()
+    }
+
+    pub(crate) fn key_package(&self) -> &KeyPackage {
+        &self.key_package
     }
 
     #[cfg(test)]
