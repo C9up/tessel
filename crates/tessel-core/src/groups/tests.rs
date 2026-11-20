@@ -7,6 +7,7 @@ use tls_codec::Serialize as _;
 use super::*;
 use crate::identity::{AccountKey, DeviceKey};
 use crate::key_packages::verify_key_package;
+use crate::messages::{Body, MESSAGE_VERSION};
 
 fn now() -> u64 {
     std::time::SystemTime::now()
@@ -62,6 +63,17 @@ fn deliver_commit(
     }
 }
 
+fn text_message(text: &str) -> Message {
+    Message::new(
+        now() * 1000,
+        Body::Text {
+            text: text.into(),
+            reply_to: None,
+        },
+    )
+    .unwrap()
+}
+
 /// `sender` chiffre un texte ; chaque lecteur doit le lire, chaque exclu non.
 fn say(
     group: &GroupId,
@@ -70,13 +82,16 @@ fn say(
     excluded: &mut [&mut Client],
     text: &str,
 ) {
-    let message = sender.encrypt(group, text.as_bytes()).unwrap();
+    let sent = text_message(text);
+    let message = sender.send_message(group, &sent).unwrap();
     for reader in readers.iter_mut() {
         match reader.process(&message).unwrap() {
-            Incoming::Application {
-                data, sender: from, ..
+            Incoming::Message {
+                message,
+                sender: from,
+                ..
             } => {
-                assert_eq!(data, text.as_bytes());
+                assert_eq!(message, Ok(sent.clone()));
                 assert_eq!(&from, sender.device().certificate());
             }
             other => panic!("expected a message, got {other:?}"),
@@ -380,6 +395,61 @@ fn un_message_mal_forme_est_refuse_sans_planter() {
     let group = a.create_group().unwrap();
     assert_eq!(a.process(b"\x00\x01garbage"), Err(GroupError::Malformed));
     assert_eq!(a.join_group(b""), Err(GroupError::Malformed));
-    let message = a.encrypt(&group, b"echo").unwrap();
+    let message = a.send_message(&group, &text_message("echo")).unwrap();
     assert_eq!(a.process(&message), Err(GroupError::OwnMessage));
+}
+
+/// Alice et Bob, un groupe à deux.
+fn pair() -> (GroupId, Client, Client) {
+    let mut a = Account::new("alice").device();
+    let mut b = Account::new("bob").device();
+    let group = a.create_group().unwrap();
+    let out = a.add_devices(&group, &[key_package(&mut b)]).unwrap();
+    a.commit_accepted(&group).unwrap();
+    b.join_group(out.welcome.as_ref().unwrap()).unwrap();
+    (group, a, b)
+}
+
+#[test]
+fn un_contenu_illisible_est_rendu_avec_son_expediteur_et_le_groupe_continue() {
+    let (group, mut a, mut b) = pair();
+    for (data, error) in [
+        (
+            &b"pas un message"[..],
+            MessageError::UnsupportedVersion(b'p'),
+        ),
+        (&[MESSAGE_VERSION, 99][..], MessageError::UnknownKind(99)),
+        (&[MESSAGE_VERSION][..], MessageError::Malformed),
+    ] {
+        let message = a.encrypt(&group, data).unwrap();
+        match b.process(&message).unwrap() {
+            Incoming::Message {
+                sender, message, ..
+            } => {
+                assert_eq!(message, Err(error));
+                assert_eq!(&sender, a.device().certificate());
+            }
+            other => panic!("expected a message, got {other:?}"),
+        }
+    }
+    say(&group, &mut a, &mut [&mut b], &mut [], "toujours là");
+}
+
+#[test]
+fn la_taille_chiffree_ne_trahit_pas_la_longueur_d_un_texte_court() {
+    let (group, mut a, _b) = pair();
+    let short = a.send_message(&group, &text_message("ok")).unwrap();
+    let long = a
+        .send_message(
+            &group,
+            &text_message("d'accord, je passe te prendre à 19 h devant la gare"),
+        )
+        .unwrap();
+    assert_eq!(short.len(), long.len());
+
+    let invalid = text_message("");
+    assert!(matches!(
+        a.send_message(&group, &invalid),
+        Err(GroupError::Message(MessageError::Invalid(_)))
+    ));
 }

@@ -7,6 +7,7 @@ mod client;
 mod groups;
 mod identity;
 mod key_packages;
+mod messages;
 mod suite;
 
 pub use client::Client;
@@ -17,6 +18,10 @@ pub use identity::{
 pub use key_packages::{
     KEY_PACKAGE_LIFETIME, KEY_PACKAGE_POOL, KEY_PACKAGE_RENEW_BEFORE, KeyPackageError,
     KeyPackageUpdate, VerifiedKeyPackage, verify_key_package,
+};
+pub use messages::{
+    Body, MAX_RECEIPT, MAX_TEXT, MESSAGE_VERSION, MIN_PADDED, MediaKey, MediaRef, Message,
+    MessageError, MessageId, ReceiptKind,
 };
 pub use suite::{CIPHERSUITE_ID, CIPHERSUITE_NAME, CoreError, self_check};
 

@@ -28,6 +28,7 @@ use tls_codec::{Deserialize as _, Serialize as _};
 use crate::client::Client;
 use crate::identity::{AccountId, Device, DeviceCertificate, DeviceId, IdentityError};
 use crate::key_packages::{VerifiedKeyPackage, capabilities};
+use crate::messages::{Message, MessageError};
 use crate::suite::CIPHERSUITE;
 
 /// Nombre d'epochs passées dont on garde les clés, pour lire un message chiffré juste
@@ -65,6 +66,9 @@ pub enum GroupError {
     /// Une feuille ne porte pas un certificat d'appareil valide.
     #[error(transparent)]
     Identity(#[from] IdentityError),
+    /// Le message à envoyer viole le format (story 02-05).
+    #[error(transparent)]
+    Message(#[from] MessageError),
 }
 
 fn mls(error: impl fmt::Display) -> GroupError {
@@ -140,14 +144,16 @@ pub struct Outgoing {
 /// Ce qu'un message reçu a produit.
 #[derive(Debug, PartialEq, Eq)]
 pub enum Incoming {
-    /// Des données chiffrées par un membre (le format est celui de la story 02-05).
-    Application {
+    /// Un message d'un membre (story 02-05). L'expéditeur est authentifié même quand le
+    /// message est illisible : l'appli peut dire « message de X, illisible » ou « mettez
+    /// Tessel à jour » plutôt que de le taire.
+    Message {
         /// Le groupe.
         group: GroupId,
         /// L'appareil qui l'a envoyé.
         sender: DeviceCertificate,
-        /// Les octets déchiffrés.
-        data: Vec<u8>,
+        /// Le message, ou pourquoi il ne se lit pas.
+        message: Result<Message, MessageError>,
     },
     /// Une proposition (un membre qui part), gardée jusqu'au prochain commit.
     Proposal {
@@ -441,8 +447,18 @@ impl Client {
         Ok(id)
     }
 
-    /// Chiffre des données pour le groupe (le format est celui de la story 02-05).
-    pub fn encrypt(&mut self, group: &GroupId, data: &[u8]) -> Result<Vec<u8>, GroupError> {
+    /// Chiffre un message pour le groupe, remplissage compris (story 02-05).
+    pub fn send_message(
+        &mut self,
+        group: &GroupId,
+        message: &Message,
+    ) -> Result<Vec<u8>, GroupError> {
+        self.encrypt(group, &message.encode()?)
+    }
+
+    /// Chiffre des octets pour le groupe. Tout passe par [`Client::send_message`], qui
+    /// garantit le format et le remplissage ; les octets bruts ne servent qu'aux tests.
+    pub(crate) fn encrypt(&mut self, group: &GroupId, data: &[u8]) -> Result<Vec<u8>, GroupError> {
         let (provider, device) = (&self.provider, &self.device);
         let state = self.groups.get_mut(group).ok_or(GroupError::UnknownGroup)?;
         serialize(
@@ -467,10 +483,10 @@ impl Client {
         let sender = sender_certificate(&state.mls, processed.sender())?;
 
         match processed.into_content() {
-            ProcessedMessageContent::ApplicationMessage(data) => Ok(Incoming::Application {
+            ProcessedMessageContent::ApplicationMessage(data) => Ok(Incoming::Message {
                 group: id,
                 sender,
-                data: data.into_bytes(),
+                message: Message::decode(&data.into_bytes()),
             }),
             ProcessedMessageContent::ProposalMessage(proposal) => {
                 state
