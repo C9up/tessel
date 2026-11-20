@@ -4,7 +4,7 @@ title: "Messages applicatifs"
 description: "Le format interne des messages (texte, médias, contrôle), chiffré dans MLS."
 tags: [product]
 status: draft
-state: todo
+state: review
 parent: epics/02-tessel-core-le-coeur-cryptographique.md
 depends_on: [stories/02-04-groupes-mls.md]
 priority: high

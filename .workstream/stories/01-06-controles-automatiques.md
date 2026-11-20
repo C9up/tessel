@@ -18,7 +18,7 @@ Une commande qui vérifie tout, branchée sur la CI de la forge où le dépôt s
 ## Critères d'acceptation
 
 - `pnpm check` enchaîne lint, types, tests TS, test d'architecture, `cargo test`, `clippy`, `cargo audit`, `cargo deny`.
-- La CI de la forge choisie lance `pnpm check` à chaque push.
+- La CI de la forge lance `pnpm check` à chaque push : GitHub Actions, dépôt public `C9up/tessel` (choix du propriétaire, 20.11.2026).
 - Le dépôt public ne contient aucun secret (contrôle automatique des fuites de secrets).
 
 ## Reviews

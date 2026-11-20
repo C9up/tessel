@@ -20,6 +20,7 @@ L'état MLS et l'historique sont chiffrés sur l'appareil, sur le web comme sur 
 - Un contrat de stockage unique dans le cœur, deux implémentations : SQLite chiffré en natif, IndexedDB côté web.
 - Web : clé WebCrypto non extractible ; Android : clé protégée par le Keystore.
 - Migrations de schéma versionnées et testées.
+- Une édition ou une suppression (story 02-05) n'est appliquée que si son expéditeur a le même compte que l'auteur du message visé ; sinon, elle est ignorée.
 
 ## Reviews
 
