@@ -10,6 +10,7 @@ mod groups;
 mod history;
 mod identity;
 mod key_packages;
+mod media;
 mod messages;
 mod outbox;
 pub mod store;
@@ -26,6 +27,10 @@ pub use identity::{
 pub use key_packages::{
     KEY_PACKAGE_LIFETIME, KEY_PACKAGE_POOL, KEY_PACKAGE_RENEW_BEFORE, KeyPackageError,
     KeyPackageUpdate, VerifiedKeyPackage, verify_key_package,
+};
+pub use media::{
+    EncryptedMedia, MEDIA_CHUNK, MEDIA_FORMAT, MediaDecryptor, MediaEncryptor, MediaError,
+    decrypt_media, encrypt_media, encrypted_len,
 };
 pub use messages::{
     Body, MAX_RECEIPT, MAX_TEXT, MESSAGE_VERSION, MIN_PADDED, MediaKey, MediaRef, Message,
