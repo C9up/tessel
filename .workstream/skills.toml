@@ -1,0 +1,8 @@
+# Provenance des skills installées depuis la bibliothèque Workstream (empreinte de la version installée).
+[skills.code-in-english]
+source = "library"
+hash = "3bb562759e90ae47"
+
+[skills.no-ai-signatures]
+source = "library"
+hash = "0733e491e4f522f9"

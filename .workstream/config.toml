@@ -6,3 +6,6 @@ include = []
 
 # Fichiers suivis par git à ignorer en plus.
 exclude = []
+
+# Modèles de projet appliqués (Workstream) : le projet reçoit ce qu'ils contiennent.
+templates = ["Global", "English in code"]
