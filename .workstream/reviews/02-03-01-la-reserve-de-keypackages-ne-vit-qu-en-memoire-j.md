@@ -4,10 +4,11 @@ title: "La réserve de KeyPackages ne vit qu'en mémoire jusqu'à la 02-06"
 description: "La réserve de KeyPackages ne vit qu'en mémoire jusqu'à la 02-06"
 tags: [review]
 status: draft
-state: todo
+state: review
 parent: stories/02-03-keypackages.md
 review: suggestion
 created: 2026-11-20
+commits: [e5901944afafe80c2c26f360d6ed3042298ce799]
 ---
 
 # La réserve de KeyPackages ne vit qu'en mémoire jusqu'à la 02-06

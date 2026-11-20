@@ -4,10 +4,11 @@ title: "Choix du format des messages à valider (commit 49509ab)"
 description: "Choix du format des messages à valider (commit 49509ab)"
 tags: [review]
 status: draft
-state: todo
+state: review
 parent: stories/02-05-messages-applicatifs.md
 review: suggestion
 created: 2026-11-20
+commits: [e5901944afafe80c2c26f360d6ed3042298ce799]
 ---
 
 # Choix du format des messages à valider (commit 49509ab)
