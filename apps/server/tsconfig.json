@@ -1,0 +1,23 @@
+{
+	"extends": "@c9up/ream/tsconfig.app.json",
+	"compilerOptions": {
+		"rootDir": "./",
+		"paths": {
+			"#app/*": ["./app/*"],
+			"#modules/*": ["./app/modules/*"],
+			"#config/*": ["./config/*"],
+			"#providers/*": ["./providers/*"],
+			"#start/*": ["./start/*"]
+		}
+	},
+	"include": [
+		"app",
+		"bin",
+		"config",
+		"database",
+		"providers",
+		"start",
+		"tests",
+		"reamrc.ts"
+	]
+}

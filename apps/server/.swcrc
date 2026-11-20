@@ -1,0 +1,3 @@
+{
+  "extends": "@c9up/ream/swcrc.app.json"
+}
