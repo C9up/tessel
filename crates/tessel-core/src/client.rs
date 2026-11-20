@@ -11,15 +11,16 @@ use zeroize::Zeroizing;
 use crate::codec::{Reader, Writer};
 use crate::groups::{Group, GroupId, read_operation, write_operation};
 use crate::history::{self, Effect, History, HistoryEntry, RECENT};
-use crate::identity::{Device, DeviceCertificate};
+use crate::identity::{AccountId, AccountKey, Device, DeviceCertificate, IdentityError};
 use crate::key_packages::{KeyPackageError, KeyPackagePool, KeyPackageUpdate};
 use crate::messages::{Message, MessageId};
 use crate::outbox::{OUTBOX, Outbox, SendId};
 use crate::safety::{Contacts, VERIFIED};
 use crate::store::{Changes, PartitionId, Record, Sealer, StoreError, StoreKey};
 
-/// Version of the client record.
-const CLIENT_VERSION: u8 = 1;
+/// Version of the client record. (Version 1, without the account key, was never
+/// released.)
+const CLIENT_VERSION: u8 = 2;
 
 /// Label of the client record: the device, the pool and the list of groups.
 const CLIENT: &[u8] = b"client";
@@ -45,11 +46,25 @@ impl std::fmt::Debug for Persisted {
     }
 }
 
+/// What creating an account's first device can fail on.
+#[derive(Debug, thiserror::Error, PartialEq, Eq)]
+pub enum ClientError {
+    /// The keys or the certificate could not be made.
+    #[error(transparent)]
+    Identity(#[from] IdentityError),
+    /// The local database failed.
+    #[error(transparent)]
+    Store(#[from] StoreError),
+}
+
 /// A running Tessel device.
 #[derive(Debug)]
 pub struct Client {
     pub(crate) provider: OpenMlsRustCrypto,
     pub(crate) device: Device,
+    /// The account key, on the device that holds it: it certifies the account's other
+    /// devices (story 03-04).
+    account_key: Option<AccountKey>,
     key_packages: KeyPackagePool,
     pub(crate) groups: HashMap<GroupId, Group>,
     pub(crate) history: History,
@@ -67,6 +82,7 @@ impl Client {
         Ok(Self {
             provider: OpenMlsRustCrypto::default(),
             device,
+            account_key: None,
             key_packages: KeyPackagePool::default(),
             groups: HashMap::new(),
             history: History::default(),
@@ -125,10 +141,17 @@ impl Client {
 
         let client_record = client_record.ok_or(StoreError::Missing("client"))?;
         let mut input = Reader(&client_record);
-        if input.u8()? != CLIENT_VERSION {
-            return Err(StoreError::Malformed);
+        match input.u8()? {
+            CLIENT_VERSION => {}
+            newer if newer > CLIENT_VERSION => return Err(StoreError::UnsupportedFormat(newer)),
+            _ => return Err(StoreError::Malformed),
         }
         let device = Device::read_from(&mut input)?;
+        let account_key = match input.u8()? {
+            0 => None,
+            1 => Some(AccountKey::read_from(&mut input)?),
+            _ => return Err(StoreError::Malformed),
+        };
         let key_packages = KeyPackagePool::read_from(&mut input)?;
         let mut groups = HashMap::new();
         for _ in 0..input.u32()? {
@@ -144,6 +167,7 @@ impl Client {
         Ok(Self {
             provider,
             device,
+            account_key,
             key_packages,
             groups,
             history,
@@ -158,9 +182,25 @@ impl Client {
         })
     }
 
+    /// Starts the client of an account's first device: a new account key, a device it
+    /// certifies, and a new store key's database. The account key stays in the
+    /// encrypted database (story 02-02); no function hands it out.
+    pub fn create_account(account: &AccountId, key: &StoreKey) -> Result<Self, ClientError> {
+        let account_key = AccountKey::generate()?;
+        let device = Device::create(account, &account_key)?;
+        let mut client = Self::new(device, key)?;
+        client.account_key = Some(account_key);
+        Ok(client)
+    }
+
     /// The device.
     pub fn device(&self) -> &Device {
         &self.device
+    }
+
+    /// Whether this device holds its account's key.
+    pub fn holds_account_key(&self) -> bool {
+        self.account_key.is_some()
     }
 
     /// Renews the *KeyPackage* pool at time `now` (Unix seconds) and returns what must
@@ -252,6 +292,13 @@ impl Client {
         let mut out = Writer(Vec::with_capacity(16 * 1024));
         out.u8(CLIENT_VERSION);
         self.device.write_to(&mut out)?;
+        match &self.account_key {
+            None => out.u8(0),
+            Some(key) => {
+                out.u8(1);
+                key.write_to(&mut out)?;
+            }
+        }
         self.key_packages.write_to(&mut out)?;
         let mut groups: Vec<_> = self.groups.iter().collect();
         groups.sort_by(|a, b| a.0.as_bytes().cmp(b.0.as_bytes()));

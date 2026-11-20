@@ -215,3 +215,28 @@ fn no_key_appears_in_debug() {
     let (_, media) = encryptor.finish().unwrap();
     assert!(format!("{media:?}").contains("MediaKey(..)"));
 }
+
+#[test]
+fn a_sealed_media_secret_opens_only_in_the_seal_that_made_it() {
+    let (blob, media) = encrypt_media(&file(1000)).unwrap();
+    let seal = MediaSeal::new().unwrap();
+    let sealed = seal.seal(&media).unwrap();
+    // Neither the key nor the digest shows through.
+    let reference = reference(seal.open(&sealed).unwrap());
+    assert!(!sealed.windows(32).any(|w| w == reference.digest));
+    assert_eq!(decrypt_media(&reference, &blob).unwrap(), file(1000));
+    // Sealing again gives other bytes for the same secret.
+    let again = seal.seal(&EncryptedMedia::of(&reference)).unwrap();
+    assert_ne!(again, sealed);
+    assert_eq!(
+        seal.open(&again).unwrap().digest(),
+        reference.digest.as_ref()
+    );
+
+    let other = MediaSeal::new().unwrap();
+    assert_eq!(other.open(&sealed).err(), Some(MediaError::Altered));
+    let mut altered = sealed.clone();
+    altered[30] ^= 1;
+    assert_eq!(seal.open(&altered).err(), Some(MediaError::Altered));
+    assert_eq!(seal.open(&sealed[..10]).err(), Some(MediaError::Altered));
+}

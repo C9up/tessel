@@ -270,6 +270,20 @@ impl AccountKey {
         certificate.signature = signature.try_into().map_err(|_| IdentityError::Crypto)?;
         Ok(certificate)
     }
+
+    /// Writes the key, private half included, into the client record. Only the store
+    /// calls this, and it seals the record before it leaves the core.
+    pub(crate) fn write_to(&self, out: &mut Writer) -> Result<(), CodecError> {
+        out.vec8(&self.0.private)?;
+        out.vec8(&self.0.public)
+    }
+
+    /// Reads back a key written by [`AccountKey::write_to`].
+    pub(crate) fn read_from(input: &mut Reader<'_>) -> Result<Self, CodecError> {
+        let private = Zeroizing::new(input.vec8()?.to_vec());
+        let public = input.vec8()?.to_vec();
+        Ok(Self(SigningKey { private, public }))
+    }
 }
 
 /// The MLS signing key of a device, before it is certified.

@@ -1,0 +1,5 @@
+{
+  "$comment": "Size budget of generated/tessel_wasm_bg.wasm (release build), in bytes. Raise it only on purpose, and note why in the Workstream journal (story 02-10).",
+  "raw": 1950000,
+  "gzip": 640000
+}

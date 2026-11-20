@@ -18,3 +18,5 @@ all = { level = "deny", priority = -1 }
 lto = true
 codegen-units = 1
 opt-level = "s"
+# The symbol names alone were half of the .wasm (story 02-10).
+strip = true

@@ -27,8 +27,8 @@
 //! to be discarded.
 
 use chacha20poly1305::aead::stream::{DecryptorBE32, EncryptorBE32};
-use chacha20poly1305::aead::{KeyInit as _, Payload};
-use chacha20poly1305::{ChaCha20Poly1305, Key};
+use chacha20poly1305::aead::{Aead as _, KeyInit as _, Payload};
+use chacha20poly1305::{ChaCha20Poly1305, Key, XChaCha20Poly1305, XNonce};
 use openmls_rust_crypto::RustCrypto;
 use openmls_traits::random::OpenMlsRand as _;
 use sha2::{Digest as _, Sha256};
@@ -116,6 +116,15 @@ impl EncryptedMedia {
     /// The size of the file, in bytes.
     pub fn size(&self) -> u64 {
         self.size
+    }
+
+    /// The secrets of a received media, to seal ([`MediaSeal`]).
+    pub fn of(media: &MediaRef) -> Self {
+        Self {
+            key: media.key.clone(),
+            digest: media.digest,
+            size: media.size,
+        }
     }
 
     /// The reference to put in the message, once the server stored the blob under
@@ -335,6 +344,102 @@ pub fn encrypt_media(file: &[u8]) -> Result<(Vec<u8>, EncryptedMedia), MediaErro
     let (end, media) = encryptor.finish()?;
     blob.extend_from_slice(&end);
     Ok((blob, media))
+}
+
+/// Associated data of a sealed media secret.
+const SEAL_LABEL: &[u8] = b"Tessel 1.0 media secret";
+const SEAL_NONCE_LEN: usize = 24;
+const SECRET_LEN: usize = 32 + 32 + 8;
+
+/// Seals the secrets of a media (its key, the digest and the size of its blob) for as
+/// long as the core runs, so that a host can keep a reference to a media and hand it
+/// back without ever holding its key (story 02-10): the web page shows a media through
+/// a sealed secret that only the core's memory can open.
+///
+/// The seal key is drawn when the core starts and never persisted: a sealed secret
+/// does not survive a restart, the host reads the history again. XChaCha20-Poly1305,
+/// with a random 24-byte nonce per secret.
+pub struct MediaSeal {
+    key: Zeroizing<[u8; 32]>,
+}
+
+impl std::fmt::Debug for MediaSeal {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("MediaSeal(..)")
+    }
+}
+
+impl MediaSeal {
+    /// A new seal, with a key drawn for this run.
+    pub fn new() -> Result<Self, MediaError> {
+        let key = RustCrypto::default()
+            .random_array()
+            .map_err(|_| MediaError::NoRandomness)?;
+        Ok(Self {
+            key: Zeroizing::new(key),
+        })
+    }
+
+    fn cipher(&self) -> XChaCha20Poly1305 {
+        XChaCha20Poly1305::new(Key::from_slice(self.key.as_slice()))
+    }
+
+    /// Seals a media's secrets.
+    pub fn seal(&self, media: &EncryptedMedia) -> Result<Vec<u8>, MediaError> {
+        let nonce: [u8; SEAL_NONCE_LEN] = RustCrypto::default()
+            .random_array()
+            .map_err(|_| MediaError::NoRandomness)?;
+        let mut secret = Zeroizing::new(Vec::with_capacity(SECRET_LEN));
+        secret.extend_from_slice(media.key.as_bytes());
+        secret.extend_from_slice(&media.digest);
+        secret.extend_from_slice(&media.size.to_be_bytes());
+        let sealed = self
+            .cipher()
+            .encrypt(
+                XNonce::from_slice(&nonce),
+                Payload {
+                    msg: &secret,
+                    aad: SEAL_LABEL,
+                },
+            )
+            .map_err(|_| MediaError::Altered)?;
+        let mut out = Vec::with_capacity(SEAL_NONCE_LEN + sealed.len());
+        out.extend_from_slice(&nonce);
+        out.extend_from_slice(&sealed);
+        Ok(out)
+    }
+
+    /// Opens secrets sealed by this very seal; anything else is [`MediaError::Altered`].
+    pub fn open(&self, sealed: &[u8]) -> Result<EncryptedMedia, MediaError> {
+        if sealed.len() < SEAL_NONCE_LEN {
+            return Err(MediaError::Altered);
+        }
+        let (nonce, sealed) = sealed.split_at(SEAL_NONCE_LEN);
+        let secret = Zeroizing::new(
+            self.cipher()
+                .decrypt(
+                    XNonce::from_slice(nonce),
+                    Payload {
+                        msg: sealed,
+                        aad: SEAL_LABEL,
+                    },
+                )
+                .map_err(|_| MediaError::Altered)?,
+        );
+        if secret.len() != SECRET_LEN {
+            return Err(MediaError::Altered);
+        }
+        let (key, rest) = secret.split_at(32);
+        let (digest, size) = rest.split_at(32);
+        let array = |bytes: &[u8]| -> Result<[u8; 32], MediaError> {
+            bytes.try_into().map_err(|_| MediaError::Altered)
+        };
+        Ok(EncryptedMedia {
+            key: MediaKey::from_bytes(array(key)?),
+            digest: array(digest)?,
+            size: u64::from_be_bytes(size.try_into().map_err(|_| MediaError::Altered)?),
+        })
+    }
 }
 
 /// Decrypts a whole blob at once, and checks it.

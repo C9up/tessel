@@ -2,7 +2,6 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import { test } from 'node:test'
 import { IDBFactory } from 'fake-indexeddb'
-import { loadTesselCoreSync } from './index.ts'
 import {
   INDEXEDDB_SCHEMA_VERSION,
   IndexedDbStore,
@@ -13,8 +12,10 @@ import {
   type StoredRecord,
   UnsupportedSchemaError,
 } from './store.ts'
+import { generateStoreKey, loadWasmSync } from './wasm.ts'
 
-const core = loadTesselCoreSync(await readFile(new URL('../generated/tessel_wasm_bg.wasm', import.meta.url)))
+loadWasmSync(await readFile(new URL('../generated/tessel_wasm_bg.wasm', import.meta.url)))
+const core = { generateStoreKey }
 
 const filled = (length: number, byte: number) => new Uint8Array(length).fill(byte)
 

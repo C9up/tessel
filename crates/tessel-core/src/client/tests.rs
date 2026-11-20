@@ -132,3 +132,24 @@ fn the_database_holds_nothing_in_clear() {
         }
     }
 }
+
+#[test]
+fn the_first_device_keeps_its_account_key_sealed_across_restarts() {
+    let account = AccountId::parse("alice@tessel.example").unwrap();
+    let key = StoreKey::generate().unwrap();
+    let client = Client::create_account(&account, &key).unwrap();
+    assert!(client.holds_account_key());
+    assert_eq!(client.device().certificate().account(), &account);
+    let mut a = Peer {
+        client,
+        store: crate::store::SqliteStore::in_memory().unwrap(),
+        key,
+    };
+    a.persist();
+    a.restart();
+    assert!(a.client.holds_account_key());
+
+    // A device certified by an account key held elsewhere does not hold it.
+    let b = Account::new("bob").device();
+    assert!(!b.client.holds_account_key());
+}

@@ -19,7 +19,7 @@ mod suite;
 #[cfg(test)]
 mod test_support;
 
-pub use client::Client;
+pub use client::{Client, ClientError};
 pub use groups::{GroupError, GroupId, Incoming, Outgoing, Removal};
 pub use history::{Content, EDITABLE_MESSAGES, Effect, HistoryEntry, Ignored};
 pub use identity::{
@@ -31,7 +31,7 @@ pub use key_packages::{
 };
 pub use media::{
     EncryptedMedia, MEDIA_CHUNK, MEDIA_FORMAT, MediaDecryptor, MediaEncryptor, MediaError,
-    decrypt_media, encrypt_media, encrypted_len,
+    MediaSeal, decrypt_media, encrypt_media, encrypted_len,
 };
 pub use messages::{
     Body, MAX_RECEIPT, MAX_TEXT, MESSAGE_VERSION, MIN_PADDED, MediaKey, MediaRef, Message,
