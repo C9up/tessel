@@ -13,7 +13,8 @@ use crate::groups::{Group, GroupId, read_operation, write_operation};
 use crate::history::{self, Effect, History, HistoryEntry, RECENT};
 use crate::identity::{Device, DeviceCertificate};
 use crate::key_packages::{KeyPackageError, KeyPackagePool, KeyPackageUpdate};
-use crate::messages::Message;
+use crate::messages::{Message, MessageId};
+use crate::outbox::{OUTBOX, Outbox, SendId};
 use crate::store::{Changes, PartitionId, Record, Sealer, StoreError, StoreKey};
 
 /// Version of the client record.
@@ -51,6 +52,7 @@ pub struct Client {
     key_packages: KeyPackagePool,
     pub(crate) groups: HashMap<GroupId, Group>,
     pub(crate) history: History,
+    pub(crate) outbox: Outbox,
     persisted: Persisted,
 }
 
@@ -66,6 +68,7 @@ impl Client {
             key_packages: KeyPackagePool::default(),
             groups: HashMap::new(),
             history: History::default(),
+            outbox: Outbox::default(),
             persisted: Persisted {
                 state: key.state_partition()?,
                 sealer,
@@ -85,6 +88,7 @@ impl Client {
         let mut client_record = None;
         let mut mls = HashMap::new();
         let mut history = History::default();
+        let mut outbox = Outbox::default();
 
         for record in state {
             if record.partition != partition {
@@ -101,10 +105,12 @@ impl Client {
                     mls.insert(key, value);
                 }
                 RECENT => history.load(&opened.body)?,
+                OUTBOX => outbox.load(&opened.body)?,
                 _ => return Err(StoreError::Malformed),
             }
         }
         history.sort();
+        outbox.sort();
         provider
             .storage()
             .values
@@ -136,6 +142,7 @@ impl Client {
             key_packages,
             groups,
             history,
+            outbox,
             persisted: Persisted {
                 sealer,
                 state: partition,
@@ -206,6 +213,7 @@ impl Client {
         drop(values);
 
         changes.append(self.history.take());
+        changes.append(self.outbox.take());
         if client_changed {
             *client = record;
         }
@@ -259,10 +267,28 @@ impl Client {
         self.history.apply(sealer, *state, group, sender, message)
     }
 
-    /// Drops the history index of a group the device left.
-    pub(crate) fn forget_history(&mut self, group: &GroupId) -> Result<(), StoreError> {
+    /// Drops the history index and the send queue of a group the device left; returns
+    /// the messages that will never leave.
+    pub(crate) fn forget_local(&mut self, group: &GroupId) -> Result<Vec<MessageId>, StoreError> {
         let Persisted { sealer, state, .. } = &self.persisted;
-        self.history.forget(sealer, *state, group)
+        self.history.forget(sealer, *state, group)?;
+        self.outbox.forget(sealer, *state, group)
+    }
+
+    /// Puts a message at the end of the group's send queue.
+    pub(crate) fn enqueue(
+        &mut self,
+        group: &GroupId,
+        message: &Message,
+    ) -> Result<SendId, StoreError> {
+        let Persisted { sealer, state, .. } = &self.persisted;
+        self.outbox.push(sealer, *state, group, message)
+    }
+
+    /// Removes an acknowledged message from the group's send queue.
+    pub(crate) fn dequeue(&mut self, group: &GroupId, send_id: &SendId) -> Result<(), StoreError> {
+        let Persisted { sealer, state, .. } = &self.persisted;
+        self.outbox.remove(sealer, *state, group, send_id)
     }
 
     #[cfg(test)]

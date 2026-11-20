@@ -31,7 +31,8 @@ use crate::codec::{CodecError, Reader, Writer};
 use crate::history::{Effect, Ignored};
 use crate::identity::{AccountId, Device, DeviceCertificate, DeviceId, IdentityError};
 use crate::key_packages::{VerifiedKeyPackage, capabilities, verify_key_package};
-use crate::messages::{Message, MessageError};
+use crate::messages::{Message, MessageError, MessageId};
+use crate::outbox::{Outbound, SendId};
 use crate::store::StoreError;
 use crate::suite::CIPHERSUITE;
 
@@ -58,6 +59,10 @@ pub enum GroupError {
     /// No pending commit.
     #[error("no pending commit")]
     NoPendingCommit,
+    /// Proposals await their commit (a member leaving): MLS forbids sending a message
+    /// until they are committed.
+    #[error("proposals await their commit")]
+    PendingProposals,
     /// A message from this very device, sent back by the server.
     #[error("own message")]
     OwnMessage,
@@ -266,6 +271,9 @@ pub enum Incoming {
         removed: Vec<DeviceCertificate>,
         /// This very device was removed: the group is erased from the device.
         removed_self: bool,
+        /// When this device was removed, its messages still queued for the group: they
+        /// will never be sent (story 02-07).
+        unsent: Vec<MessageId>,
     },
 }
 
@@ -541,14 +549,15 @@ impl Client {
         Ok(id)
     }
 
-    /// Encrypts a message for the group, padding included (story 02-05), and records it
-    /// in the history (story 02-06). An edit or a deletion of a message this account did
-    /// not write is refused: every member would ignore it.
-    pub fn send_message(
+    /// Sends a message to the group: records it in the history (story 02-06) and puts
+    /// it at the end of the group's send queue (story 02-07), online or not. The host
+    /// then sends it with [`Client::next_outbound`]. An edit or a deletion of a message
+    /// this account did not write is refused: every member would ignore it.
+    pub fn queue_message(
         &mut self,
         group: &GroupId,
         message: &Message,
-    ) -> Result<Vec<u8>, GroupError> {
+    ) -> Result<SendId, GroupError> {
         if !self.groups.contains_key(group) {
             return Err(GroupError::UnknownGroup);
         }
@@ -556,10 +565,67 @@ impl Client {
         if let Some(reason) = self.history.verdict(group, author, message) {
             return Err(GroupError::Ignored(reason));
         }
-        let encrypted = self.encrypt(group, &message.encode()?)?;
+        // The format is checked before anything is recorded.
+        message.encode()?;
         let sender = self.device.certificate().clone();
         self.record(group, &sender, message)?;
-        Ok(encrypted)
+        Ok(self.enqueue(group, message)?)
+    }
+
+    /// The head of the group's send queue, encrypted for the group's current epoch;
+    /// `None` when nothing waits. To send once the group is up to date (incoming
+    /// commits processed), then [`Client::outbound_sent`] on the server's
+    /// acknowledgement; until then, the same message comes back, encrypted again.
+    /// While a member's departure awaits its commit, MLS forbids sending:
+    /// [`GroupError::PendingProposals`], to resolve with
+    /// [`Client::commit_pending_proposals`].
+    pub fn next_outbound(&mut self, group: &GroupId) -> Result<Option<Outbound>, GroupError> {
+        let state = self.groups.get(group).ok_or(GroupError::UnknownGroup)?;
+        let Some(head) = self.outbox.head(group) else {
+            return Ok(None);
+        };
+        if state.mls.pending_proposals().next().is_some() {
+            return Err(GroupError::PendingProposals);
+        }
+        let (send_id, message_id) = (head.send_id, head.message_id);
+        let encoded = head.encoded.clone();
+        Ok(Some(Outbound {
+            group: group.clone(),
+            send_id,
+            message_id,
+            encrypted: self.encrypt(group, &encoded)?,
+        }))
+    }
+
+    /// The server acknowledged a message: it leaves the queue, and the next one can be
+    /// sent. A repeated acknowledgement changes nothing.
+    pub fn outbound_sent(&mut self, group: &GroupId, send_id: &SendId) -> Result<(), GroupError> {
+        Ok(self.dequeue(group, send_id)?)
+    }
+
+    /// The groups whose queue holds messages: what to send when the connection comes
+    /// back.
+    pub fn outbound_groups(&self) -> Vec<GroupId> {
+        self.outbox.groups().cloned().collect()
+    }
+
+    /// The group's messages still waiting to be sent, in order (shown as pending).
+    pub fn waiting_messages(&self, group: &GroupId) -> Vec<MessageId> {
+        self.outbox.waiting(group)
+    }
+
+    /// Queues a message and sends it at once, as a host that is online does.
+    #[cfg(test)]
+    pub(crate) fn send_message(
+        &mut self,
+        group: &GroupId,
+        message: &Message,
+    ) -> Result<Vec<u8>, GroupError> {
+        let send_id = self.queue_message(group, message)?;
+        let outbound = self.next_outbound(group)?.ok_or(GroupError::UnknownGroup)?;
+        assert_eq!(outbound.send_id, send_id, "the queue was not empty");
+        self.outbound_sent(group, &send_id)?;
+        Ok(outbound.encrypted)
     }
 
     /// Encrypts bytes for the group. Everything goes through [`Client::send_message`],
@@ -625,15 +691,18 @@ impl Client {
                     .mls
                     .merge_staged_commit(provider, *commit)
                     .map_err(mls)?;
-                if removed_self {
-                    self.forget(&id)?;
-                }
+                let unsent = if removed_self {
+                    self.forget(&id)?
+                } else {
+                    Vec::new()
+                };
                 Ok(Incoming::Commit {
                     group: id,
                     sender,
                     added,
                     removed,
                     removed_self,
+                    unsent,
                 })
             }
             // Our own commit sent back by the server: it accepted it. (Only as a
@@ -653,6 +722,7 @@ impl Client {
                     added,
                     removed,
                     removed_self: false,
+                    unsent: Vec::new(),
                 })
             }
             ProcessedMessageContent::OwnPrivateMessage => Err(GroupError::OwnMessage),
@@ -671,14 +741,14 @@ impl Client {
         Ok(state.mls.epoch().as_u64())
     }
 
-    /// Erases a group from the device, MLS state and history index included. Its
-    /// history stays readable.
-    fn forget(&mut self, group: &GroupId) -> Result<(), GroupError> {
+    /// Erases a group from the device, MLS state, history index and send queue
+    /// included; returns the messages that will never leave. Its history stays
+    /// readable.
+    fn forget(&mut self, group: &GroupId) -> Result<Vec<MessageId>, GroupError> {
         if let Some(mut state) = self.groups.remove(group) {
             state.mls.delete(self.provider.storage()).map_err(mls)?;
         }
-        self.forget_history(group)?;
-        Ok(())
+        Ok(self.forget_local(group)?)
     }
 }
 

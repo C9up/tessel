@@ -11,6 +11,7 @@ mod history;
 mod identity;
 mod key_packages;
 mod messages;
+mod outbox;
 pub mod store;
 mod suite;
 #[cfg(test)]
@@ -30,6 +31,7 @@ pub use messages::{
     Body, MAX_RECEIPT, MAX_TEXT, MESSAGE_VERSION, MIN_PADDED, MediaKey, MediaRef, Message,
     MessageError, MessageId, ReceiptKind,
 };
+pub use outbox::{Outbound, SendId};
 pub use store::{
     Changes, PartitionId, Record, RecordId, STORE_FORMAT, Store, StoreError, StoreKey,
 };

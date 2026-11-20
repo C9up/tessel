@@ -1,6 +1,8 @@
 import init, { ciphersuite, generateStoreKey, initSync, selfCheck, version } from '../generated/tessel_wasm.js'
 
+export { type OutboundMessage, type Outbox, OutboxSender, type OutboxSenderOptions, RETRY_DELAYS, type Relay } from './outbox.ts'
 export {
+  type Bytes,
   INDEXEDDB_SCHEMA_VERSION,
   IndexedDbStore,
   loadStoreKey,
