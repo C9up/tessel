@@ -4,7 +4,7 @@ title: "Chiffrement des médias"
 description: "Chaque fichier est chiffré sur l'appareil avec sa propre clé, transmise dans le message MLS."
 tags: [product]
 status: draft
-state: todo
+state: review
 parent: epics/02-tessel-core-le-coeur-cryptographique.md
 depends_on: [stories/02-05-messages-applicatifs.md]
 priority: high
