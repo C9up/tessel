@@ -18,7 +18,7 @@ L'état MLS et l'historique sont chiffrés sur l'appareil, sur le web comme sur 
 ## Critères d'acceptation
 
 - Un contrat de stockage unique dans le cœur, deux implémentations : SQLite chiffré en natif, IndexedDB côté web.
-- Web : clé WebCrypto non extractible ; Android : clé protégée par le Keystore.
+- Web : clé WebCrypto non extractible. (Android : clé protégée par le Keystore, déplacé dans la 02-13, qui apporte la liaison mobile ; ADR-007.)
 - Migrations de schéma versionnées et testées.
 - Une édition ou une suppression (story 02-05) n'est appliquée que si son expéditeur a le même compte que l'auteur du message visé ; sinon, elle est ignorée.
 

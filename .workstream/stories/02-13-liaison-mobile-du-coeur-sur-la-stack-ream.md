@@ -21,6 +21,7 @@ Le cœur atteint le téléphone par la liaison que la stack mobile de Ream défi
 - Un crate de liaison mince (ABI C) au-dessus de `tessel-core`, construit pour `aarch64-linux-android` et `x86_64-linux-android`.
 - Même API TypeScript que `@tessel/core-web` (interface `TesselCore`), vérifiée par un test de contrat commun.
 - Aucune clé privée ne traverse la liaison.
+- La clé de la base locale (`StoreKey`, 02-06) est scellée par une clé du Keystore Android, non exportable, et rangée scellée dans la base SQLite (`SqliteStore::set_host_value`) ; la fonctionnalité `sqlite` de `tessel-core` est activée (ADR-007).
 
 ## Reviews
 

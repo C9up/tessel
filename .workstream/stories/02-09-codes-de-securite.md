@@ -4,7 +4,7 @@ title: "Codes de sécurité"
 description: "Deux personnes vérifient qu'elles se parlent bien, par un code ou un QR."
 tags: [product]
 status: draft
-state: todo
+state: review
 parent: epics/02-tessel-core-le-coeur-cryptographique.md
 depends_on: [stories/02-02-identite-de-compte-et-d-appareil.md]
 priority: high
