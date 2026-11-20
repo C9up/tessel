@@ -11,7 +11,6 @@ export default class CreateOutbox extends Migration {
   async up() {
     this.schema.createTable('outbox', (t) => {
       t.uuid('id').primary()
-      // Encrypted by BlackGate (deploy/blackgate/columns.yaml): the column holds the ciphertext.
       t.text('event_type').notNullable()
       t.text('payload').notNullable()
       t.timestamptz('created_at').notNullable().defaultTo(this.now())

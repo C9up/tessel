@@ -1,5 +1,5 @@
 # Tessel's development infrastructure, apart from the database.
-# Postgres and BlackGate are started by scripts/stack.sh (mutual TLS, as in production).
+# PostgreSQL is started by scripts/stack.sh (mutual TLS, as in production).
 # KeyDB: outbox guard, rate limiting, broadcast between instances.
 services:
   keydb:

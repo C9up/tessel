@@ -3,7 +3,7 @@ import app from '@c9up/ream/services/app'
 import { databaseUrl } from '#modules/shared/infrastructure/databaseUrl.js'
 import env from '#start/env.js'
 
-// Through BlackGate only, over mutual TLS. Migrations are not run at startup: they
+// Over mutual TLS only (sslmode=verify-full and a client certificate). Migrations are not run at startup: they
 // run as the schema owner (scripts/migrate.sh), never as the application's role.
 export default defineConfig({
   url: databaseUrl({

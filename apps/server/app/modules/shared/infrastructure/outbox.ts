@@ -8,13 +8,14 @@
  * between client and database comes into play. Each parameter carries an explicit
  * cast (`::uuid`, `::double precision`), since the driver binds a JS string as `text`.
  *
- * `event_type`, `payload` and `last_error` are encrypted by BlackGate: the database
- * sees only ciphertext there, the application reads them in clear.
+ * An event names only opaque identifiers (accounts, devices, groups), never content:
+ * what users say is end-to-end encrypted by their devices and never reaches the
+ * server in clear (ADR-006).
  */
 export interface OutboxRow {
   id: string
   event_type: string
-  /** The event's JSON, as text (the column holds BlackGate's ciphertext). */
+  /** The event's JSON, as text. */
   payload: unknown
   attempts: number
 }

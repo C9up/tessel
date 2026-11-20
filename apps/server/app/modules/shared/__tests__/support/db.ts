@@ -1,11 +1,10 @@
 import { type AsyncDatabaseConnection, createNapiConnection } from '@c9up/atlas'
 import databaseConfig from '#config/database.js'
-import { databaseUrl } from '#modules/shared/infrastructure/databaseUrl.js'
 import env from '#start/env.js'
 
 /**
- * A test connection: the application's own, as `app`, through BlackGate over mutual
- * TLS (scripts/stack.sh start). A single session, so that a test's writes and reads
+ * A test connection: the application's own, as `app`, over mutual TLS
+ * (scripts/stack.sh start). A single session, so that a test's writes and reads
  * share it (taken from Klinivia).
  */
 export function connectTestDb(): Promise<AsyncDatabaseConnection> {
@@ -15,25 +14,13 @@ export function connectTestDb(): Promise<AsyncDatabaseConnection> {
 }
 
 /**
- * The owner, on PostgreSQL itself, around BlackGate: what the database really
- * keeps. Tests only, to check that an encrypted column holds ciphertext.
+ * The application's URL with its TLS settings replaced: to prove that the database
+ * refuses anything weaker than mutual TLS.
  */
-export function connectDirectDb(): Promise<AsyncDatabaseConnection> {
-  const port = env.get('DB_DIRECT_PORT')
-  const user = env.get('DB_OWNER_USER')
-  if (port === undefined || user === undefined) throw new Error('DB_DIRECT_PORT / DB_OWNER_USER missing from .env (scripts/stack.sh start)')
-  return createNapiConnection(
-    databaseUrl({
-      host: env.get('DB_HOST'),
-      port,
-      database: env.get('DB_DATABASE'),
-      user,
-      password: env.get('DB_OWNER_PASSWORD'),
-      rootCert: env.get('DB_SSL_ROOT_CERT'),
-      cert: env.get('DB_SSL_CERT'),
-      key: env.get('DB_SSL_KEY'),
-    }),
-    1,
-    1,
-  )
+export function weakenedUrl(tls: Record<string, string>): string {
+  const url = new URL(databaseConfig.url ?? '')
+  for (const key of ['sslmode', 'sslrootcert', 'sslcert', 'sslkey']) url.searchParams.delete(key)
+  for (const [key, value] of Object.entries(tls)) url.searchParams.set(key, value)
+  url.password = encodeURIComponent(env.get('DB_PASSWORD') ?? '')
+  return url.toString()
 }

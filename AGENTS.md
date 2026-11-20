@@ -17,7 +17,7 @@ Tessel est une messagerie chiffrée de bout en bout (MLS). Lire [la vision](.wor
 
 - Modèle `ream/apps/nadeo` : `app/modules/<module>/{domain,application,infrastructure,http}`, `start/<module>.ts` compose. Lire `nadeo/AGENTS.md` avant d'ajouter un module.
 - Utiliser les paquets `@c9up` avant d'écrire une brique (`ream-dev/packages/*/README.md`). Un défaut d'un paquet se signale dans le `.workstream` de ce paquet.
-- BlackGate est une boîte noire : l'app ne connaît que l'URL de sa base.
+- PostgreSQL en TLS mutuel seulement (`scripts/stack.sh`) ; la base ne garde que du chiffré de bout en bout ou des identifiants opaques (ADR-006).
 - Dates et durées : `@c9up/chronos`, jamais `Date.now()` à la main.
 
 ## Langue

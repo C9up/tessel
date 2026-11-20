@@ -16,15 +16,15 @@ Why and how: [the vision](.workstream/vision.md). The work is tracked in [`.work
 
 ## Running
 
-Prerequisites: Node ≥ 24, pnpm 12, Rust through rustup (the toolchain and its targets are pinned by `rust-toolchain.toml`; `scripts/cargo.sh` goes through rustup even when it is not in the PATH), `wasm-bindgen-cli` 0.2.129, Podman, `podman-compose`, and the [BlackGate](https://github.com/C9up/blackgate) binaries (release build; default path in `scripts/stack.sh`, or `BLACKGATE_BIN` / `BLACKGATE_CLI`).
+Prerequisites: Node ≥ 24, pnpm 12, Rust through rustup (the toolchain and its targets are pinned by `rust-toolchain.toml`; `scripts/cargo.sh` goes through rustup even when it is not in the PATH), `wasm-bindgen-cli` 0.2.129, Podman, `podman-compose`, `openssl` and `python3`.
 
-PostgreSQL is reachable only through BlackGate, over mutual TLS, in development as in production. Two roles: `tessel_owner` owns the schema and runs the migrations, `app` runs the application and owns nothing.
+PostgreSQL is reachable only over mutual TLS (`sslmode=verify-full` and a client certificate), in development as in production. It keeps only what devices have already end-to-end encrypted, or opaque identifiers (ADR-006). Two roles: `tessel_owner` owns the schema and runs the migrations, `app` runs the application and owns nothing.
 
 ```bash
 pnpm install
 cp apps/server/.env.example apps/server/.env
 pnpm --filter @tessel/server exec ream generate:key
-pnpm infra      # PostgreSQL + BlackGate (scripts/stack.sh) and KeyDB; writes the DB_* lines of .env
+pnpm infra      # PostgreSQL (scripts/stack.sh) and KeyDB; writes the DB_* lines of .env
 pnpm --filter @tessel/server migrate   # as tessel_owner (scripts/migrate.sh)
 pnpm dev        # server + web shell
 pnpm check      # lint, types, TS and Rust tests, dependency audit
@@ -39,15 +39,12 @@ pnpm --filter @tessel/core-web build   # tessel-wasm → packages/core-web/gener
 
 Mobile uses neither React Native nor Expo: it will be built on Ream's mobile stack (its ADR-009, epic 73), of which Tessel is the pilot app.
 
-The columns BlackGate encrypts are declared in `deploy/blackgate/columns.yaml` before the migration that creates them, then `pnpm infra:reload`. The columns left in clear are listed, with their reason, in `deploy/blackgate/clear-columns.yaml`.
-
 Development ports, chosen to be free of the machine's other Ream apps:
 
 | Service | Port |
 |---|---|
 | Server (API + web) | 3460 |
-| BlackGate (the database, for the application) | 5460 |
-| PostgreSQL direct (tests only) | 5461 |
+| PostgreSQL | 5460 |
 | KeyDB | 6460 |
 
 ## License

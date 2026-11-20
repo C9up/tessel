@@ -14,7 +14,7 @@ export interface DatabaseTarget {
 
 /**
  * The PostgreSQL URL of a connection, always `sslmode=verify-full` with a
- * client certificate: the database is reached through BlackGate only.
+ * client certificate: the database is reached over mutual TLS only.
  *
  * Nothing in the configuration can lower it: atlas connects in plaintext,
  * without a word, when a URL carries no `sslmode`, and `require` or

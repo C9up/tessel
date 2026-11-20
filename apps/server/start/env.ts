@@ -6,7 +6,7 @@ export default await Env.create(new URL('../', import.meta.url), {
   APP_KEY: Env.schema.secret(),
   NODE_ENV: Env.schema.enum(['development', 'production', 'test'] as const),
   PORT: Env.schema.number(),
-  // PostgreSQL through BlackGate only, over mutual TLS (scripts/stack.sh start writes these lines).
+  // PostgreSQL over mutual TLS only (scripts/stack.sh start writes these lines).
   DB_HOST: Env.schema.string({ format: 'host' }),
   DB_PORT: Env.schema.number(),
   DB_DATABASE: Env.schema.string(),
@@ -15,9 +15,8 @@ export default await Env.create(new URL('../', import.meta.url), {
   DB_SSL_ROOT_CERT: Env.schema.string(),
   DB_SSL_CERT: Env.schema.string(),
   DB_SSL_KEY: Env.schema.string(),
-  // The schema owner (scripts/migrate.sh) and direct PostgreSQL: tests only.
+  // The schema owner: scripts/migrate.sh only, never the application.
   DB_OWNER_USER: Env.schema.string.optional(),
   DB_OWNER_PASSWORD: Env.schema.string.optional(),
-  DB_DIRECT_PORT: Env.schema.number().optional(),
   REDIS_URL: Env.schema.string(),
 })
