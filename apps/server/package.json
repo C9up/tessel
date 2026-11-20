@@ -31,7 +31,8 @@
     "@c9up/quasar": "^0.2.3",
     "@c9up/ream": "^0.2.30",
     "@c9up/spectrum": "^0.1.19",
-    "reflect-metadata": "^0.2.2"
+    "reflect-metadata": "^0.2.2",
+    "@tessel/protocol": "workspace:*"
   },
   "devDependencies": {
     "@c9up/helix": "^0.2.14",
@@ -43,5 +44,6 @@
   },
   "engines": {
     "node": ">=24.0.0"
-  }
+  },
+  "license": "MIT"
 }

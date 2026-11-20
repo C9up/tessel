@@ -3,10 +3,12 @@ import env from '#start/env.js'
 
 export default defineConfig({
   xss: true,
-  csrf: { exceptRoutes: [] },
-  // Through the validated environment, never `process.env` directly: the
-  // schema in start/env.ts is what guarantees the key is there at all, and
-  // reading around it gives back `string | undefined` typed as a string.
-  // Released here, where the raw key is needed, and nowhere else.
+  // `/rpc` est exempté : l'API ne connaît aucun cookie, chaque appel est authentifié par
+  // la clé de l'appareil (story 03-02). Sans cookie que le navigateur joindrait tout seul,
+  // une requête forgée par un autre site n'a rien à usurper. Le CSRF reste actif pour
+  // toute autre route, si un jour une route s'appuie sur un cookie.
+  csrf: { exceptRoutes: ['/rpc'] },
+  // Par l'environnement validé, jamais `process.env` directement ; la clé n'est
+  // révélée qu'ici, où elle sert.
   secret: env.get('APP_KEY').release(),
 })

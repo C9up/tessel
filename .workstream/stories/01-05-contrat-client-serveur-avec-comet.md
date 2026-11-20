@@ -4,7 +4,7 @@ title: "Contrat client-serveur avec comet"
 description: "Un seul contrat JSON-RPC, partagé par le serveur, le web et le mobile."
 tags: [product]
 status: draft
-state: todo
+state: review
 parent: epics/01-fondations-du-depot.md
 depends_on: [stories/01-02-serveur-ream-sur-le-modele-nadeo.md]
 priority: high
