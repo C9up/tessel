@@ -14,7 +14,7 @@ iOS, Android sans Google et app de bureau. Après la v1.
 
 ## Périmètre
 
-- App iOS (Expo + APNs), UnifiedPush, coquille de bureau Tauri.
+- App iOS (stack mobile de Ream + APNs), UnifiedPush, coquille de bureau Tauri.
 
 ## Terminé quand
 

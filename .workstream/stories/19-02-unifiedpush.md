@@ -6,7 +6,7 @@ tags: [product]
 status: draft
 state: todo
 parent: epics/19-plateformes-suivantes.md
-depends_on: [stories/13-05-notifications-fcm-android.md]
+depends_on: [stories/13-13-notifications-fcm-sur-mobile.md]
 priority: backlog
 created: 2026-11-20
 ---

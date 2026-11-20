@@ -25,15 +25,14 @@ Conséquence assumée : n'importe qui peut reprendre le code, y compris dans un 
 | Dépendance | Licence | Compatible |
 |---|---|---|
 | OpenMLS, `openmls_rust_crypto` | MIT | Oui |
-| uniffi | MPL-2.0 | Oui : copyleft par fichier, seuls ses propres fichiers modifiés resteraient MPL |
 | wasm-bindgen | MIT / Apache-2.0 | Oui |
-| JNA | Apache-2.0 / LGPL-2.1 (au choix) | Oui, sous Apache-2.0 |
-| Expo, React Native, React | MIT | Oui |
 | Paquets `@c9up/*` utilisés (ream, atlas, blackhole, chronos, quasar, spectrum, helix) | MIT | Oui |
 | `@c9up/ream-cli` | Aucune déclarée | Outil de développement, non distribué ; à signaler à ream-cli |
 | BlackGate | Aucune déclarée (ni `Cargo.toml`, ni `LICENSE`) | Service séparé, non lié au code de Tessel ; à clarifier avant d'en livrer une image avec Tessel (story 14-04) |
 | PostgreSQL / KeyDB | PostgreSQL / BSD-3-Clause | Oui (services séparés) |
 | libsignal | AGPL-3.0 | **Écarté** (ADR-001) |
+
+Le mobile ne dépend ni de React Native ni d'Expo (ADR-003) : sa liaison viendra de la stack mobile de Ream, dont les licences seront relevées à son arrivée.
 
 ## Conséquences
 

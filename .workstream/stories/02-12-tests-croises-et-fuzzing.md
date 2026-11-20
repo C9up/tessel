@@ -6,7 +6,7 @@ tags: [product]
 status: draft
 state: todo
 parent: epics/02-tessel-core-le-coeur-cryptographique.md
-depends_on: [stories/02-10-liaisons-wasm-pour-le-web.md, stories/02-11-liaisons-natives-pour-expo.md]
+depends_on: [stories/02-10-liaisons-wasm-pour-le-web.md, stories/02-13-liaison-mobile-du-coeur-sur-la-stack-ream.md]
 priority: medium
 created: 2026-11-20
 ---

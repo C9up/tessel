@@ -6,7 +6,7 @@ tags: [product]
 status: draft
 state: todo
 parent: epics/21-passerelles-sur-l-appareil.md
-depends_on: [stories/13-01-app-expo-et-module-tessel-core.md]
+depends_on: [stories/13-10-coquille-mobile-sur-la-stack-ream.md]
 priority: backlog
 created: 2026-11-20
 ---

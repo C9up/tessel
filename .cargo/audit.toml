@@ -1,4 +1,0 @@
-# cargo audit : mêmes exceptions que deny.toml, chacune motivée là-bas.
-[advisories]
-# basic-toml non maintenu : outil de build uniquement (crates/uniffi-bindgen), jamais livré.
-ignore = ["RUSTSEC-2026-0374"]

@@ -1,7 +1,7 @@
 ---
 type: Epic
 title: "Client web"
-description: "Tessel dans le navigateur, sur Aurora et Nebula : le serveur ne sert que la coquille, tout se déchiffre dans la page."
+description: "L'interface de Tessel, écrite une fois en aurora et nebula : dans le navigateur d'abord (le serveur ne sert que la coquille, tout se déchiffre dans la page), puis en vues natives sur le téléphone (epic 13)."
 tags: [product]
 status: draft
 order: 12

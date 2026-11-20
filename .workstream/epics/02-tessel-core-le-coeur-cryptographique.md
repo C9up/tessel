@@ -16,7 +16,7 @@ Le crate Rust unique qui parle MLS, chiffre, déchiffre et garde l'état local, 
 
 - MLS (RFC 9420) via OpenMLS : identités, *KeyPackages*, groupes, messages.
 - Base locale chiffrée, file d'envoi hors ligne, chiffrement des médias, codes de sécurité.
-- Liaisons WASM (web) et natives (Expo), avec une API asynchrone typée.
+- Liaisons WASM (web) et mobile (celle de la stack mobile de Ream, ABI C + JSI), avec une même API asynchrone typée.
 - Tests croisés WASM ↔ natif, vecteurs de test MLS, fuzzing des entrées.
 
 ## Terminé quand

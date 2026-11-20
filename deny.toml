@@ -6,12 +6,6 @@ all-features = true
 # Tout avis RustSec fait échouer, y compris « non maintenu » : on décide en connaissance de cause.
 version = 2
 yanked = "deny"
-ignore = [
-  # basic-toml, non maintenu : tiré par askama pour le générateur uniffi-bindgen
-  # (crates/uniffi-bindgen), qui tourne à la build et n'est jamais livré. La bibliothèque
-  # livrée (tessel-ffi) n'en dépend pas. À lever quand uniffi changera de moteur.
-  { id = "RUSTSEC-2026-0374", reason = "outil de build uniquement (uniffi-bindgen), jamais livré" },
-]
 
 [licenses]
 version = 2

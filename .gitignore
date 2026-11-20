@@ -22,17 +22,6 @@ coverage/
 # Workstream : seul l'état local de l'application est ignoré, le travail se commite.
 .workstream/.local/
 
-# Projets natifs : régénérés par `expo prebuild`, jamais édités à la main.
-apps/*/android/
-apps/*/ios/
-.expo/
-apps/*/.expo/
-expo-env.d.ts
-
 # Sorties générées du cœur Rust (liaisons WASM et natives)
 packages/*/pkg/
 packages/*/generated/
-apps/*/modules/*/android/build/
-apps/*/modules/*/android/.cxx/
-apps/*/modules/*/android/src/main/jniLibs/
-apps/*/modules/*/android/src/main/java/uniffi/
