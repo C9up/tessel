@@ -17,6 +17,8 @@ pub(crate) const READ: &[u8] = b"read";
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Conversation {
     pub group: GroupId,
+    /// The group's name (story 05-02); empty for none.
+    pub name: String,
     /// When its last message was sent (the sender's clock, in milliseconds); `None`
     /// before any message.
     pub last_sent_at: Option<u64>,
@@ -83,6 +85,10 @@ impl Client {
                     .history
                     .summary(&group, own, self.read_marks.get(&group));
                 Conversation {
+                    name: self
+                        .group_settings(&group)
+                        .map(|settings| settings.name)
+                        .unwrap_or_default(),
                     group,
                     last_sent_at: summary.last_sent_at,
                     unread: summary.unread,

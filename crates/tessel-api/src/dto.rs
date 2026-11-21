@@ -10,9 +10,9 @@ use serde::{Deserialize, Serialize};
 use serde_bytes::ByteBuf;
 use tessel_core::{
     AccountId, Avatar, Body, Content, Conversation, DeviceCertificate, DeviceId, Effect,
-    EncryptedMedia, EnvelopeHeader, EnvelopeKind, GroupId, HistoryEntry, Incoming,
-    KeyPackageUpdate, MediaRef, MediaSeal, Message, MessageId, Outbound, Outgoing, PartitionId,
-    Profile, ReceiptKind, Record, RecordId, Removal, SafetyNumber, Trust,
+    EncryptedMedia, EnvelopeHeader, EnvelopeKind, GroupChange, GroupId, GroupSettings,
+    HistoryEntry, Incoming, KeyPackageUpdate, MediaRef, MediaSeal, Message, MessageId, Outbound,
+    Outgoing, PartitionId, Profile, ReceiptKind, Record, RecordId, Removal, SafetyNumber, Trust,
 };
 
 fn bytes(value: impl Into<Vec<u8>>) -> ByteBuf {
@@ -496,6 +496,9 @@ pub enum IncomingDto {
         removed_self: bool,
         unsent: Vec<ByteBuf>,
         verified_removed: Vec<DeviceInfo>,
+        /// The group's new settings, when the commit changed them (story 05-02).
+        #[serde(skip_serializing_if = "Option::is_none")]
+        settings: Option<GroupSettingsDto>,
     },
 }
 
@@ -534,6 +537,7 @@ impl IncomingDto {
                 removed_self,
                 unsent,
                 verified_removed,
+                settings,
             } => Self::Commit {
                 group: bytes(group.as_bytes()),
                 sender: DeviceInfo::of(&sender)?,
@@ -542,6 +546,7 @@ impl IncomingDto {
                 removed_self,
                 unsent: ids(&unsent),
                 verified_removed: DeviceInfo::all(&verified_removed)?,
+                settings: settings.map(GroupSettingsDto::from),
             },
         })
     }
@@ -692,6 +697,8 @@ pub(crate) fn devices(devices: &[DeviceId]) -> Vec<ByteBuf> {
 #[serde(rename_all = "camelCase")]
 pub struct ConversationDto {
     group: ByteBuf,
+    /// The group's name; empty for none (story 05-02).
+    name: String,
     /// Milliseconds, the sender's clock; absent before any message.
     #[serde(skip_serializing_if = "Option::is_none")]
     last_sent_at: Option<u64>,
@@ -702,8 +709,53 @@ impl From<Conversation> for ConversationDto {
     fn from(conversation: Conversation) -> Self {
         Self {
             group: bytes(conversation.group.as_bytes()),
+            name: conversation.name,
             last_sent_at: conversation.last_sent_at,
             unread: conversation.unread,
         }
+    }
+}
+
+/// A group's settings (story 05-02).
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GroupSettingsDto {
+    name: String,
+    admins: Vec<String>,
+    restricted: bool,
+}
+
+impl From<GroupSettings> for GroupSettingsDto {
+    fn from(settings: GroupSettings) -> Self {
+        Self {
+            name: settings.name,
+            admins: settings.admins.iter().map(ToString::to_string).collect(),
+            restricted: settings.restricted,
+        }
+    }
+}
+
+/// A change to a group's settings, as the page sends it.
+#[derive(Deserialize)]
+#[serde(
+    tag = "type",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
+pub enum GroupChangeIn {
+    Rename { name: String },
+    Admin { account: String, admin: bool },
+    Restrict { restricted: bool },
+}
+
+impl GroupChangeIn {
+    pub(crate) fn into_change(self) -> Result<GroupChange, ApiError> {
+        Ok(match self {
+            Self::Rename { name } => GroupChange::Rename(name),
+            Self::Admin { account, admin } => {
+                GroupChange::Admin(AccountId::parse(&account).api()?, admin)
+            }
+            Self::Restrict { restricted } => GroupChange::Restrict(restricted),
+        })
     }
 }

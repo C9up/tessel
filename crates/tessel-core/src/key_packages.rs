@@ -227,7 +227,11 @@ fn create(
 pub(crate) fn capabilities() -> Capabilities {
     Capabilities::builder()
         .ciphersuites(vec![CIPHERSUITE])
-        .extensions(vec![ExtensionType::LastResort])
+        // The group settings (story 05-02), which every group requires of its members.
+        .extensions(vec![
+            ExtensionType::LastResort,
+            ExtensionType::Unknown(crate::groups::GROUP_SETTINGS_EXTENSION),
+        ])
         .build()
 }
 

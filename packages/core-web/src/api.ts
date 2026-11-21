@@ -31,11 +31,29 @@ export interface KeyPackageUpdate {
 /** A group in the conversation list (story 05-01). */
 export interface ConversationSummary {
   group: Bytes
+  /** The group's name (story 05-02); empty for none. */
+  name: string
   /** When its last message was sent, the sender's clock, in milliseconds; absent before any. */
   lastSentAt?: number
   /** Messages of other accounts not read yet on this device. */
   unread: number
 }
+
+/**
+ * A group's settings (story 05-02), held in its encrypted MLS state: the server never
+ * sees them.
+ */
+export interface GroupSettings {
+  /** Empty for none (a conversation between two people). */
+  name: string
+  /** The accounts that administer the group; its creator first. */
+  admins: string[]
+  /** Only admins add or remove other accounts, and rename the group. */
+  restricted: boolean
+}
+
+/** A change to a group's settings. */
+export type GroupChange = { type: 'rename'; name: string } | { type: 'admin'; account: string; admin: boolean } | { type: 'restrict'; restricted: boolean }
 
 /** A new device waiting to be linked (story 03-04). */
 export interface LinkRequestInfo {
@@ -154,6 +172,8 @@ export type Incoming =
       unsent: Bytes[]
       /** Devices of verified contacts among `removed`: tell the user (story 03-05). */
       verifiedRemoved: DeviceInfo[]
+      /** The group's new settings, when the commit changed them (story 05-02). */
+      settings?: GroupSettings
     }
 
 export type Content =
@@ -252,6 +272,12 @@ export interface TesselCore {
   createGroup(): Promise<Bytes>
   addDevices(group: Bytes, keyPackages: Bytes[]): Promise<Commit>
   removeDevices(group: Bytes, removals: Removal[]): Promise<Commit>
+  /**
+   * Changes the group's name, admins or restriction (story 05-02). `group:not-admin`
+   * when the group reserves it to admins; `group:nothing-to-commit` when it changes nothing.
+   */
+  configureGroup(group: Bytes, change: GroupChange): Promise<Commit>
+  groupSettings(group: Bytes): Promise<GroupSettings>
   commitPendingProposals(group: Bytes): Promise<Commit>
   commitAccepted(group: Bytes): Promise<void>
   commitRejected(group: Bytes): Promise<void>
@@ -312,6 +338,8 @@ export const METHODS = [
   'createGroup',
   'addDevices',
   'removeDevices',
+  'configureGroup',
+  'groupSettings',
   'commitPendingProposals',
   'commitAccepted',
   'commitRejected',

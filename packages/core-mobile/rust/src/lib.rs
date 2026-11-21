@@ -18,7 +18,7 @@ use std::path::PathBuf;
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 use serde_bytes::ByteBuf;
-use tessel_api::dto::{BodyDto, DeviceInfo, ProfileDto, RemovalIn};
+use tessel_api::dto::{BodyDto, DeviceInfo, GroupChangeIn, ProfileDto, RemovalIn};
 use tessel_api::error::{fail, malformed};
 use tessel_api::{ApiError, Code as _, PendingLink, Session};
 use tessel_core::store::SqliteStore;
@@ -313,6 +313,14 @@ impl Host {
             "removeDevices" => {
                 let (group, removals): (ByteBuf, Vec<RemovalIn>) = args(input)?;
                 answer(session.remove_devices(&group, removals)?)
+            }
+            "configureGroup" => {
+                let (group, change): (ByteBuf, GroupChangeIn) = args(input)?;
+                answer(session.configure_group(&group, change)?)
+            }
+            "groupSettings" => {
+                let (group,): (ByteBuf,) = args(input)?;
+                answer(session.group_settings(&group)?)
             }
             "commitPendingProposals" => {
                 let (group,): (ByteBuf,) = args(input)?;

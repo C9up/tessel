@@ -20,7 +20,7 @@ use std::fmt;
 use openmls::prelude::{
     KeyPackage, LeafNodeIndex, Member, MlsGroup, MlsGroupCreateConfig, MlsGroupJoinConfig,
     MlsMessageBodyIn, MlsMessageIn, MlsMessageOut, PURE_CIPHERTEXT_WIRE_FORMAT_POLICY,
-    ProcessedMessageContent, Sender, StagedCommit, StagedWelcome,
+    ProcessedMessageContent, Proposal, Sender, StagedCommit, StagedWelcome,
 };
 use openmls_rust_crypto::OpenMlsRustCrypto;
 use openmls_traits::OpenMlsProvider;
@@ -36,10 +36,19 @@ use crate::outbox::{Outbound, SendId};
 use crate::store::StoreError;
 use crate::suite::CIPHERSUITE;
 
+mod settings;
+
+use settings::Rules;
+pub use settings::{GROUP_SETTINGS_EXTENSION, GroupChange, GroupSettings, MAX_GROUP_NAME};
+
 /// Number of past epochs whose keys are kept, to read a message encrypted just before a
 /// commit and arriving just after it. Beyond that, the secret is erased (forward
 /// secrecy).
 const MAX_PAST_EPOCHS: usize = 3;
+
+/// The most devices a group holds (story 05-02): about 200 people with five devices
+/// each, within the server's limits at that size (ADR-008).
+pub const MAX_GROUP_DEVICES: usize = 1000;
 
 /// What groups can reject.
 #[derive(Debug, thiserror::Error, PartialEq, Eq)]
@@ -85,6 +94,15 @@ pub enum GroupError {
     /// The local database failed (story 02-06).
     #[error(transparent)]
     Store(#[from] StoreError),
+    /// The group reserves this to its admins (story 05-02).
+    #[error("reserved to the group's admins")]
+    NotAdmin,
+    /// A group name is at most [`MAX_GROUP_NAME`] bytes, without control characters.
+    #[error("invalid group name")]
+    InvalidName,
+    /// The group would exceed [`MAX_GROUP_DEVICES`].
+    #[error("group too large")]
+    TooLarge,
 }
 
 fn mls(error: impl fmt::Display) -> GroupError {
@@ -150,6 +168,7 @@ pub(crate) enum Operation {
     Add(Vec<VerifiedKeyPackage>),
     Remove(Vec<Removal>),
     CommitProposals,
+    Configure(GroupChange),
 }
 
 /// Writes a pending intent into the client record of the local database (story 02-06).
@@ -189,6 +208,24 @@ pub(crate) fn write_operation(
             }
         }
         Some(Operation::CommitProposals) => out.u8(3),
+        Some(Operation::Configure(change)) => {
+            out.u8(4);
+            match change {
+                GroupChange::Rename(name) => {
+                    out.u8(0);
+                    out.vec16(name.as_bytes())?;
+                }
+                GroupChange::Admin(account, admin) => {
+                    out.u8(1);
+                    out.vec16(account.to_string().as_bytes())?;
+                    out.u8(u8::from(*admin));
+                }
+                GroupChange::Restrict(restricted) => {
+                    out.u8(2);
+                    out.u8(u8::from(*restricted));
+                }
+            }
+        }
     }
     Ok(())
 }
@@ -223,6 +260,18 @@ pub(crate) fn read_operation(input: &mut Reader<'_>) -> Result<Option<Operation>
             Some(Operation::Remove(removals))
         }
         3 => Some(Operation::CommitProposals),
+        4 => Some(Operation::Configure(match input.u8()? {
+            0 => GroupChange::Rename(input.string16()?),
+            1 => GroupChange::Admin(
+                input
+                    .string16()?
+                    .parse()
+                    .map_err(|_| CodecError::Malformed)?,
+                input.bool()?,
+            ),
+            2 => GroupChange::Restrict(input.bool()?),
+            _ => return Err(CodecError::Malformed),
+        })),
         _ => return Err(CodecError::Malformed),
     })
 }
@@ -278,6 +327,8 @@ pub enum Incoming {
         /// told. They leave the verified devices, so that one coming back is reported as
         /// new ([`crate::Trust::NewDevice`]).
         verified_removed: Vec<DeviceCertificate>,
+        /// The group's new settings, when the commit changed them (story 05-02).
+        settings: Option<GroupSettings>,
     },
 }
 
@@ -288,14 +339,15 @@ pub(crate) struct Group {
     pub(crate) pending: Option<Operation>,
 }
 
-fn create_config() -> MlsGroupCreateConfig {
-    MlsGroupCreateConfig::builder()
+fn create_config(settings: &GroupSettings) -> Result<MlsGroupCreateConfig, GroupError> {
+    Ok(MlsGroupCreateConfig::builder()
         .ciphersuite(CIPHERSUITE)
         .capabilities(capabilities())
+        .with_group_context_extensions(settings.extensions()?)
         .use_ratchet_tree_extension(true)
         .wire_format_policy(PURE_CIPHERTEXT_WIRE_FORMAT_POLICY)
         .max_past_epochs(MAX_PAST_EPOCHS)
-        .build()
+        .build())
 }
 
 fn join_config() -> MlsGroupJoinConfig {
@@ -360,6 +412,46 @@ fn serialize(message: MlsMessageOut) -> Result<Vec<u8>, GroupError> {
     message.tls_serialize_detached().map_err(mls)
 }
 
+fn member_certificates(group: &MlsGroup) -> Result<Vec<DeviceCertificate>, GroupError> {
+    group.members().map(|m| certificate_of(&m)).collect()
+}
+
+/// Checks a received proposal against the group's rules (story 05-02), before the group
+/// keeps it or a commit applies it. `author` sent it.
+fn check_proposal(
+    group: &MlsGroup,
+    rules: &Rules<'_>,
+    author: &DeviceCertificate,
+    proposal: &Proposal,
+) -> Result<(), GroupError> {
+    rules.proposal(author, proposal, || match proposal {
+        Proposal::Remove(remove) => certificate_at(group, remove.removed()),
+        _ => Err(GroupError::Malformed),
+    })
+}
+
+/// Checks a received commit against the group's rules (story 05-02): each proposal as
+/// its author was allowed to make it, and the size the group reaches. The group's
+/// settings after it, when it changes them.
+fn check_commit(
+    group: &MlsGroup,
+    commit: &StagedCommit,
+) -> Result<Option<GroupSettings>, GroupError> {
+    let settings = GroupSettings::of(group)?;
+    let members = member_certificates(group)?;
+    let rules = Rules::new(&settings, &members);
+    for queued in commit.queued_proposals() {
+        let author = sender_certificate(group, queued.sender())?;
+        check_proposal(group, &rules, &author, queued.proposal())?;
+    }
+    let size = members.len() + commit.add_proposals().count();
+    if size.saturating_sub(commit.remove_proposals().count()) > MAX_GROUP_DEVICES {
+        return Err(GroupError::TooLarge);
+    }
+    let after = GroupSettings::of_context(commit.group_context().extensions())?;
+    Ok((after != settings).then_some(after))
+}
+
 impl Group {
     /// Prepares the commit for an intent on the group's current state. `None` when the
     /// intent no longer has a purpose (the devices are already there, or already gone).
@@ -378,10 +470,14 @@ impl Group {
             .map(|m| Ok((m.index, certificate_of(&m)?)))
             .collect::<Result<_, GroupError>>()?;
         let own = self.mls.own_leaf_index();
+        let author = device.certificate().account();
+        let settings = GroupSettings::of(&self.mls)?;
+        let certificates: Vec<DeviceCertificate> = members.iter().map(|(_, c)| c.clone()).collect();
+        let rules = Rules::new(&settings, &certificates);
 
         let (commit, welcome) = match &operation {
             Operation::Add(key_packages) => {
-                let fresh: Vec<KeyPackage> = key_packages
+                let fresh: Vec<&VerifiedKeyPackage> = key_packages
                     .iter()
                     .filter(|kp| {
                         let wanted = kp.certificate();
@@ -389,11 +485,18 @@ impl Group {
                             c.account() == wanted.account() && c.device_id() == wanted.device_id()
                         })
                     })
-                    .map(|kp| kp.key_package().clone())
                     .collect();
                 if fresh.is_empty() {
                     return Ok(None);
                 }
+                for key_package in &fresh {
+                    rules.membership(author, key_package.certificate().account())?;
+                }
+                if members.len() + fresh.len() > MAX_GROUP_DEVICES {
+                    return Err(GroupError::TooLarge);
+                }
+                let fresh: Vec<KeyPackage> =
+                    fresh.iter().map(|kp| kp.key_package().clone()).collect();
                 let (commit, welcome, _) = self
                     .mls
                     .add_members(provider, device, &fresh)
@@ -409,9 +512,26 @@ impl Group {
                 if leaves.is_empty() {
                     return Ok(None);
                 }
+                for (index, certificate) in &members {
+                    if leaves.contains(index) {
+                        rules.membership(author, certificate.account())?;
+                    }
+                }
                 let (commit, welcome, _) = self
                     .mls
                     .remove_members(provider, device, &leaves)
+                    .map_err(mls)?;
+                (commit, welcome)
+            }
+            Operation::Configure(change) => {
+                let next = settings.with(change)?;
+                if next == settings {
+                    return Ok(None);
+                }
+                rules.settings(author, &next)?;
+                let (commit, welcome, _) = self
+                    .mls
+                    .update_group_context_extensions(provider, next.extensions()?, device)
                     .map_err(mls)?;
                 (commit, welcome)
             }
@@ -443,12 +563,14 @@ impl Client {
             .ok_or(GroupError::NothingToCommit)
     }
 
-    /// Creates a group of which this device is the only member.
+    /// Creates a group of which this device is the only member, unnamed, administered by
+    /// this account (story 05-02).
     pub fn create_group(&mut self) -> Result<GroupId, GroupError> {
+        let settings = GroupSettings::created_by(self.device.certificate().account());
         let mls = MlsGroup::new(
             &self.provider,
             &self.device,
-            &create_config(),
+            &create_config(&settings)?,
             self.device.credential_with_key()?,
         )
         .map_err(mls)?;
@@ -476,6 +598,23 @@ impl Client {
         removals: &[Removal],
     ) -> Result<Outgoing, GroupError> {
         self.commit(group, Operation::Remove(removals.to_vec()))
+    }
+
+    /// Prepares a change of the group's settings (story 05-02): its name, its admins, or
+    /// whether membership changes are reserved to them. Refused when the group reserves
+    /// it to its admins and this account is not one.
+    pub fn configure_group(
+        &mut self,
+        group: &GroupId,
+        change: GroupChange,
+    ) -> Result<Outgoing, GroupError> {
+        self.commit(group, Operation::Configure(change))
+    }
+
+    /// The group's settings: its name, its admins, whether membership is reserved to them.
+    pub fn group_settings(&self, group: &GroupId) -> Result<GroupSettings, GroupError> {
+        let state = self.groups.get(group).ok_or(GroupError::UnknownGroup)?;
+        GroupSettings::of(&state.mls)
     }
 
     /// Prepares the commit of the received proposals (a member leaving).
@@ -544,9 +683,16 @@ impl Client {
         }
         let staged = StagedWelcome::new_from_welcome(&self.provider, &join_config(), welcome, None)
             .map_err(mls)?;
+        let mut size = 0;
         for member in staged.members() {
             certificate_of(&member)?;
+            size += 1;
         }
+        if size > MAX_GROUP_DEVICES {
+            return Err(GroupError::TooLarge);
+        }
+        // Settings this core cannot read keep it out (story 05-02).
+        GroupSettings::of_context(staged.group_context().extensions())?;
         let mls = staged.into_group(&self.provider).map_err(mls)?;
         let id = GroupId::of(&mls);
         self.groups.insert(id.clone(), Group { mls, pending: None });
@@ -673,6 +819,12 @@ impl Client {
                 })
             }
             ProcessedMessageContent::ProposalMessage(proposal) => {
+                // Kept only if its author may make it (story 05-02): a commit of the
+                // pending proposals then carries only allowed ones.
+                let settings = GroupSettings::of(&state.mls)?;
+                let members = member_certificates(&state.mls)?;
+                let rules = Rules::new(&settings, &members);
+                check_proposal(&state.mls, &rules, &sender, proposal.proposal())?;
                 state
                     .mls
                     .store_pending_proposal(provider.storage(), *proposal)
@@ -682,6 +834,8 @@ impl Client {
             ProcessedMessageContent::ExternalJoinProposalMessage(_) => Err(GroupError::Malformed),
             ProcessedMessageContent::StagedCommitMessage(commit) => {
                 let (added, removed) = summarize(&state.mls, &commit)?;
+                // Refused before anything changes when a proposal breaks the group's rules.
+                let settings = check_commit(&state.mls, &commit)?;
                 let removed_self = commit.self_removed();
                 // Another member's commit won this epoch: ours, if there was one, is
                 // void; its intent stays for `retry_commit`.
@@ -709,6 +863,7 @@ impl Client {
                     removed_self,
                     unsent,
                     verified_removed,
+                    settings,
                 })
             }
             // Our own commit sent back by the server: it accepted it. (Only as a
@@ -720,6 +875,7 @@ impl Client {
                     .pending_commit()
                     .ok_or(GroupError::NoPendingCommit)?;
                 let (added, removed) = summarize(&state.mls, commit)?;
+                let settings = check_commit(&state.mls, commit)?;
                 state.mls.merge_pending_commit(provider).map_err(mls)?;
                 state.pending = None;
                 Ok(Incoming::Commit {
@@ -731,6 +887,7 @@ impl Client {
                     unsent: Vec::new(),
                     // This device made the commit: nothing to warn its own user about.
                     verified_removed: Vec::new(),
+                    settings,
                 })
             }
             ProcessedMessageContent::OwnPrivateMessage => Err(GroupError::OwnMessage),

@@ -21,9 +21,10 @@ use tessel_core::{
 };
 
 use crate::dto::{
-    BodyDto, Commit, ConversationDto, DeviceInfo, EncryptedFile, EnvelopeHeaderDto,
-    HistoryEntryDto, IncomingDto, KeyPackageInfo, KeyPackages, LinkGrantDto, OutboundDto,
-    ProfileDto, Queued, RemovalIn, SafetyDto, StoreChanges, StoredRecord, certificate, id16,
+    BodyDto, Commit, ConversationDto, DeviceInfo, EncryptedFile, EnvelopeHeaderDto, GroupChangeIn,
+    GroupSettingsDto, HistoryEntryDto, IncomingDto, KeyPackageInfo, KeyPackages, LinkGrantDto,
+    OutboundDto, ProfileDto, Queued, RemovalIn, SafetyDto, StoreChanges, StoredRecord, certificate,
+    id16,
 };
 pub use crate::error::{ApiError, Code};
 use crate::error::{OrApi as _, fail};
@@ -286,6 +287,27 @@ impl Session {
             self.client
                 .remove_devices(&group(group_id), &removals)
                 .api()?,
+        ))
+    }
+
+    /// Changes the group's settings (story 05-02): `{ type: 'rename', name }`,
+    /// `{ type: 'admin', account, admin }` or `{ type: 'restrict', restricted }`.
+    pub fn configure_group(
+        &mut self,
+        group_id: &[u8],
+        change: GroupChangeIn,
+    ) -> Result<Commit, ApiError> {
+        Ok(Commit::from(
+            self.client
+                .configure_group(&group(group_id), change.into_change()?)
+                .api()?,
+        ))
+    }
+
+    /// The group's settings: its name, its admins, whether membership is reserved to them.
+    pub fn group_settings(&self, group_id: &[u8]) -> Result<GroupSettingsDto, ApiError> {
+        Ok(GroupSettingsDto::from(
+            self.client.group_settings(&group(group_id)).api()?,
         ))
     }
 

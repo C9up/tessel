@@ -15,7 +15,7 @@ use serde::Serialize;
 use serde::de::DeserializeOwned;
 use serde_bytes::ByteBuf;
 use tessel_api::Session;
-use tessel_api::dto::{BodyDto, ProfileDto, RemovalIn, StoredRecord};
+use tessel_api::dto::{BodyDto, GroupChangeIn, ProfileDto, RemovalIn, StoredRecord};
 use wasm_bindgen::prelude::{JsError, JsValue, wasm_bindgen};
 
 use crate::error::OrJs as _;
@@ -239,6 +239,24 @@ impl Core {
     ) -> Result<JsValue, JsValue> {
         let removals = from_js::<Vec<RemovalIn>>(removals)?;
         to_js(&self.session.remove_devices(group_id, removals).js()?)
+    }
+
+    /// Changes the group's settings (story 05-02): `{ type: 'rename', name }`,
+    /// `{ type: 'admin', account, admin }` or `{ type: 'restrict', restricted }`.
+    #[wasm_bindgen(js_name = configureGroup)]
+    pub fn configure_group(
+        &mut self,
+        group_id: &[u8],
+        change: JsValue,
+    ) -> Result<JsValue, JsValue> {
+        let change = from_js::<GroupChangeIn>(change)?;
+        to_js(&self.session.configure_group(group_id, change).js()?)
+    }
+
+    /// The group's settings: `{ name, admins, restricted }`.
+    #[wasm_bindgen(js_name = groupSettings)]
+    pub fn group_settings(&self, group_id: &[u8]) -> Result<JsValue, JsValue> {
+        to_js(&self.session.group_settings(group_id).js()?)
     }
 
     #[wasm_bindgen(js_name = commitPendingProposals)]

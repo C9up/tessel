@@ -12,6 +12,7 @@ import { Core, ciphersuite, generateStoreKey, PendingLink, statePartition, verif
 import {
   type ConversationSummary,
   type DeviceInfo,
+  type GroupChange,
   type LinkGrant,
   type LinkRequestInfo,
   type OutgoingBody,
@@ -264,6 +265,14 @@ export class CoreHost implements TesselCore {
 
   removeDevices(group: Bytes, removals: Removal[]) {
     return this.#call((core) => core.removeDevices(group, removals))
+  }
+
+  configureGroup(group: Bytes, change: GroupChange) {
+    return this.#call((core) => core.configureGroup(group, change))
+  }
+
+  groupSettings(group: Bytes) {
+    return this.#call((core) => core.groupSettings(group))
   }
 
   commitPendingProposals(group: Bytes) {

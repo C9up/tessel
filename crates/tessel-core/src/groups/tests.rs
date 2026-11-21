@@ -461,3 +461,284 @@ fn the_encrypted_size_does_not_betray_the_length_of_a_short_text() {
         Err(GroupError::Message(MessageError::Invalid(_)))
     ));
 }
+
+/// Whether `needle` appears in `haystack`.
+fn contains(haystack: &[u8], needle: &[u8]) -> bool {
+    haystack.windows(needle.len()).any(|w| w == needle)
+}
+
+/// A commit from `author` that every other member processes.
+fn change(group: &GroupId, author: &mut Client, others: &mut [&mut Client], change: GroupChange) {
+    let out = author.configure_group(group, change).unwrap();
+    deliver_commit(group, author, others, &out);
+}
+
+/// Alice (admin), Bob and Carol, one device each.
+fn trio() -> (GroupId, Client, Client, Client, Account) {
+    let carol = Account::new("carol");
+    let (mut a, mut b, mut c) = (
+        Account::new("alice").device(),
+        Account::new("bob").device(),
+        carol.device(),
+    );
+    let group = a.create_group().unwrap();
+    let out = a
+        .add_devices(&group, &[key_package(&mut b), key_package(&mut c)])
+        .unwrap();
+    a.commit_accepted(&group).unwrap();
+    for joiner in [&mut b, &mut c] {
+        joiner.join_group(out.welcome.as_ref().unwrap()).unwrap();
+    }
+    (group, a, b, c, carol)
+}
+
+#[test]
+fn a_group_is_named_and_its_name_reaches_every_member_encrypted() {
+    let (group, mut a, mut b) = pair();
+    let alice = a.device().certificate().account().clone();
+    assert_eq!(
+        a.group_settings(&group).unwrap(),
+        GroupSettings {
+            name: String::new(),
+            admins: vec![alice.clone()],
+            restricted: false,
+        }
+    );
+    assert_eq!(b.group_settings(&group), a.group_settings(&group));
+
+    let out = a
+        .configure_group(&group, GroupChange::Rename("Famille Dupont".into()))
+        .unwrap();
+    assert!(
+        !contains(&out.commit, b"Famille Dupont"),
+        "the name went out in clear"
+    );
+    a.commit_accepted(&group).unwrap();
+    match b.process(&out.commit).unwrap() {
+        Incoming::Commit { settings, .. } => {
+            assert_eq!(settings.map(|s| s.name), Some("Famille Dupont".into()));
+        }
+        other => panic!("expected a commit, got {other:?}"),
+    }
+    assert_eq!(b.group_settings(&group).unwrap().name, "Famille Dupont");
+
+    // A newcomer learns it from the Welcome, which hides it too.
+    let mut c = Account::new("carol").device();
+    let out = a.add_devices(&group, &[key_package(&mut c)]).unwrap();
+    let welcome = out.welcome.clone().unwrap();
+    assert!(!contains(&welcome, b"Famille Dupont"));
+    deliver_commit(&group, &mut a, &mut [&mut b], &out);
+    c.join_group(&welcome).unwrap();
+    assert_eq!(c.group_settings(&group).unwrap().name, "Famille Dupont");
+
+    // A commit that changes nothing is not made.
+    assert_eq!(
+        a.configure_group(&group, GroupChange::Rename("Famille Dupont".into())),
+        Err(GroupError::NothingToCommit)
+    );
+}
+
+#[test]
+fn a_name_is_short_and_without_control_characters() {
+    let (group, mut a, _) = pair();
+    for name in ["x".repeat(MAX_GROUP_NAME + 1), "two\nlines".into()] {
+        assert_eq!(
+            a.configure_group(&group, GroupChange::Rename(name)),
+            Err(GroupError::InvalidName)
+        );
+    }
+    assert!(
+        a.configure_group(&group, GroupChange::Rename("é".repeat(MAX_GROUP_NAME / 2)))
+            .is_ok()
+    );
+}
+
+#[test]
+fn a_restricted_group_reserves_membership_and_its_name_to_admins() {
+    let (group, mut a, mut b, mut c, _) = trio();
+    let (alice, bob) = (
+        a.device().certificate().account().clone(),
+        b.device().certificate().account().clone(),
+    );
+    change(
+        &group,
+        &mut a,
+        &mut [&mut b, &mut c],
+        GroupChange::Restrict(true),
+    );
+
+    // Bob is no admin: he adds or removes no one else, renames nothing, promotes no one.
+    let mut dave = Account::new("dave").device();
+    let dave_key_package = key_package(&mut dave);
+    assert_eq!(
+        b.add_devices(&group, std::slice::from_ref(&dave_key_package)),
+        Err(GroupError::NotAdmin)
+    );
+    assert_eq!(
+        b.remove_devices(&group, &[Removal::Account(alice.clone())]),
+        Err(GroupError::NotAdmin)
+    );
+    assert_eq!(
+        b.configure_group(&group, GroupChange::Rename("mine".into())),
+        Err(GroupError::NotAdmin)
+    );
+    assert_eq!(
+        b.configure_group(&group, GroupChange::Admin(bob.clone(), true)),
+        Err(GroupError::NotAdmin)
+    );
+
+    // Alice makes him admin; then he adds Dave.
+    change(
+        &group,
+        &mut a,
+        &mut [&mut b, &mut c],
+        GroupChange::Admin(bob.clone(), true),
+    );
+    let out = b.add_devices(&group, &[dave_key_package]).unwrap();
+    deliver_commit(&group, &mut b, &mut [&mut a, &mut c], &out);
+    dave.join_group(out.welcome.as_ref().unwrap()).unwrap();
+    assert_eq!(a.members(&group).unwrap().len(), 4);
+}
+
+#[test]
+fn a_member_adds_and_removes_its_own_devices_in_a_restricted_group() {
+    let (group, mut a, mut b, mut c, carol) = trio();
+    change(
+        &group,
+        &mut a,
+        &mut [&mut b, &mut c],
+        GroupChange::Restrict(true),
+    );
+
+    // Carol, no admin, adds her tablet, then removes it.
+    let mut tablet = carol.device();
+    let out = c.add_devices(&group, &[key_package(&mut tablet)]).unwrap();
+    deliver_commit(&group, &mut c, &mut [&mut a, &mut b], &out);
+    tablet.join_group(out.welcome.as_ref().unwrap()).unwrap();
+    let removal = Removal::Device(
+        tablet.device().certificate().account().clone(),
+        tablet.device().certificate().device_id(),
+    );
+    let out = c.remove_devices(&group, &[removal]).unwrap();
+    deliver_commit(&group, &mut c, &mut [&mut a, &mut b], &out);
+    assert_eq!(a.members(&group).unwrap().len(), 3);
+}
+
+#[test]
+fn a_forbidden_commit_is_refused_by_every_member() {
+    let (group, mut a, mut b, mut c, _) = trio();
+    change(
+        &group,
+        &mut a,
+        &mut [&mut b, &mut c],
+        GroupChange::Restrict(true),
+    );
+    let epoch = a.epoch(&group).unwrap();
+
+    // A modified client: Bob commits Dave's addition without the rules.
+    let mut dave = Account::new("dave").device();
+    let key_package = key_package(&mut dave).key_package().clone();
+    let state = b.groups.get_mut(&group).unwrap();
+    let (commit, _, _) = state
+        .mls
+        .add_members(&b.provider, &b.device, &[key_package])
+        .unwrap();
+    let commit = serialize(commit).unwrap();
+    for member in [&mut a, &mut c] {
+        assert_eq!(member.process(&commit), Err(GroupError::NotAdmin));
+        assert_eq!(member.epoch(&group).unwrap(), epoch);
+    }
+
+    // Nor does a forged renaming pass.
+    b.groups
+        .get_mut(&group)
+        .unwrap()
+        .mls
+        .clear_pending_commit(b.provider.storage())
+        .unwrap();
+    let forged = GroupSettings {
+        name: "taken".into(),
+        ..b.group_settings(&group).unwrap()
+    };
+    let state = b.groups.get_mut(&group).unwrap();
+    let (commit, _, _) = state
+        .mls
+        .update_group_context_extensions(&b.provider, forged.extensions().unwrap(), &b.device)
+        .unwrap();
+    let commit = serialize(commit).unwrap();
+    assert_eq!(a.process(&commit), Err(GroupError::NotAdmin));
+    assert_eq!(a.group_settings(&group).unwrap().name, "");
+}
+
+#[test]
+fn anyone_commits_a_departure_and_a_group_without_admins_opens_again() {
+    let (group, mut a, mut b, mut c, _) = trio();
+    change(
+        &group,
+        &mut a,
+        &mut [&mut b, &mut c],
+        GroupChange::Restrict(true),
+    );
+
+    // Alice, the only admin, leaves; Bob (no admin) commits her departure.
+    let proposal = a.leave_group(&group).unwrap();
+    for member in [&mut b, &mut c] {
+        assert!(matches!(
+            member.process(&proposal).unwrap(),
+            Incoming::Proposal { .. }
+        ));
+    }
+    let out = b.commit_pending_proposals(&group).unwrap();
+    b.commit_accepted(&group).unwrap();
+    assert!(matches!(
+        c.process(&out.commit).unwrap(),
+        Incoming::Commit { .. }
+    ));
+    assert!(matches!(
+        a.process(&out.commit).unwrap(),
+        Incoming::Commit {
+            removed_self: true,
+            ..
+        }
+    ));
+
+    // No admin is left: the group is open, anyone adds and promotes.
+    let mut dave = Account::new("dave").device();
+    let out = c.add_devices(&group, &[key_package(&mut dave)]).unwrap();
+    deliver_commit(&group, &mut c, &mut [&mut b], &out);
+    let carol = c.device().certificate().account().clone();
+    change(
+        &group,
+        &mut c,
+        &mut [&mut b],
+        GroupChange::Admin(carol.clone(), true),
+    );
+    assert!(b.group_settings(&group).unwrap().admins.contains(&carol));
+}
+
+#[test]
+fn a_rejected_renaming_is_replayed_on_the_up_to_date_state() {
+    let (group, mut a, mut b) = pair();
+    let mine = a
+        .configure_group(&group, GroupChange::Rename("ours".into()))
+        .unwrap();
+    // Bob's commit wins the epoch.
+    let theirs = b
+        .configure_group(&group, GroupChange::Rename("theirs".into()))
+        .unwrap();
+    b.commit_accepted(&group).unwrap();
+    a.commit_rejected(&group).unwrap();
+    a.process(&theirs.commit).unwrap();
+    drop(mine);
+
+    // The intent survives a restart of the record, then is replayed.
+    let mut out = Writer::default();
+    write_operation(&mut out, a.groups[&group].pending.as_ref()).unwrap();
+    let read = read_operation(&mut Reader(&out.0)).unwrap();
+    assert!(matches!(read, Some(Operation::Configure(GroupChange::Rename(ref n))) if n == "ours"));
+
+    let retried = a.retry_commit(&group).unwrap().unwrap();
+    a.commit_accepted(&group).unwrap();
+    b.process(&retried.commit).unwrap();
+    assert_eq!(b.group_settings(&group).unwrap().name, "ours");
+}

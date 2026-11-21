@@ -26,7 +26,10 @@ mod test_support;
 pub use client::{Client, ClientError};
 pub use conversations::Conversation;
 pub use envelope::{EnvelopeError, EnvelopeHeader, EnvelopeKind, inspect_envelope};
-pub use groups::{GroupError, GroupId, Incoming, Outgoing, Removal};
+pub use groups::{
+    GROUP_SETTINGS_EXTENSION, GroupChange, GroupError, GroupId, GroupSettings, Incoming,
+    MAX_GROUP_DEVICES, MAX_GROUP_NAME, Outgoing, Removal,
+};
 pub use history::{Content, EDITABLE_MESSAGES, Effect, HistoryEntry, Ignored};
 pub use identity::{
     AccountId, AccountKey, CHALLENGE_LEN, Device, DeviceCertificate, DeviceId, DeviceKey,

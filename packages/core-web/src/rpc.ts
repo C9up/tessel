@@ -203,6 +203,12 @@ export class RemoteCore implements TesselCore {
   removeDevices(...args: Parameters<TesselCore['removeDevices']>) {
     return this.#call('removeDevices', args)
   }
+  configureGroup(...args: Parameters<TesselCore['configureGroup']>) {
+    return this.#call('configureGroup', args)
+  }
+  groupSettings(group: Bytes) {
+    return this.#call('groupSettings', [group])
+  }
   commitPendingProposals(group: Bytes) {
     return this.#call('commitPendingProposals', [group])
   }

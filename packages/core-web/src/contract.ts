@@ -208,6 +208,30 @@ export function contract(transports: Record<string, Transport>): void {
       await assert.rejects(bob.core.commitAccepted(group), (error: unknown) => error instanceof TesselError && error.code === 'group:no-pending-commit')
     })
 
+    test(`${transport}: a group is named, and a restricted one is its admins' to change`, async () => {
+      const { alice, bob, group } = await pair(make)
+      assert.deepEqual(await bob.core.groupSettings(group), { name: '', admins: ['alice@tessel.example'], restricted: false })
+
+      const renamed = await alice.core.configureGroup(group, { type: 'rename', name: 'Famille' })
+      await alice.core.commitAccepted(group)
+      const seen = await bob.core.process(renamed.commit)
+      assert.equal(seen.type === 'commit' && seen.settings?.name, 'Famille')
+      const listed = (await bob.core.conversations()).find((each) => each.group.join() === group.join())
+      assert.equal(listed?.name, 'Famille')
+
+      const restricted = await alice.core.configureGroup(group, { type: 'restrict', restricted: true })
+      await alice.core.commitAccepted(group)
+      await bob.core.process(restricted.commit)
+      await assert.rejects(bob.core.configureGroup(group, { type: 'rename', name: 'mine' }), { code: 'group:not-admin' })
+      const carol = await account(make, 'carol')
+      const keyPackage = (await carol.core.refreshKeyPackages(now())).publish[0]
+      assert.ok(keyPackage)
+      await assert.rejects(bob.core.addDevices(group, [keyPackage]), { code: 'group:not-admin' })
+      await assert.rejects(alice.core.configureGroup(group, { type: 'rename', name: 'x'.repeat(129) }), { code: 'group:invalid-name' })
+      await assert.rejects(alice.core.configureGroup(group, { type: 'restrict', restricted: true }), { code: 'group:nothing-to-commit' })
+      for (const each of [alice.core, bob.core, carol.core]) await each.close()
+    })
+
     test(`${transport}: a media goes through encrypted, its key sealed in the core`, async () => {
       const { alice, bob, group } = await pair(make)
       const file = new Uint8Array(200_000).map((_, i) => i % 251)

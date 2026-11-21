@@ -136,6 +136,9 @@ impl Code for GroupError {
             Self::PendingProposals => "pending-proposals",
             Self::OwnMessage => "own-message",
             Self::NothingToCommit => "nothing-to-commit",
+            Self::NotAdmin => "not-admin",
+            Self::InvalidName => "invalid-name",
+            Self::TooLarge => "too-large",
             Self::Mls(_) => "mls",
         };
         format!("group:{case}")
