@@ -9,6 +9,7 @@ use openmls_traits::OpenMlsProvider;
 use zeroize::Zeroizing;
 
 use crate::codec::{Reader, Writer};
+use crate::conversations::{READ, ReadMarks};
 use crate::groups::{Group, GroupError, GroupId, read_operation, write_operation};
 use crate::history::{self, Effect, History, HistoryEntry, RECENT};
 use crate::identity::{AccountId, AccountKey, Device, DeviceCertificate, IdentityError};
@@ -75,6 +76,8 @@ pub struct Client {
     pub(crate) contacts: Contacts,
     /// The profile keys contacts shared.
     pub(crate) profile_keys: ProfileKeys,
+    /// Where the user stopped reading, per group (story 05-01).
+    pub(crate) read_marks: ReadMarks,
     persisted: Persisted,
 }
 
@@ -95,6 +98,7 @@ impl Client {
             outbox: Outbox::default(),
             contacts: Contacts::default(),
             profile_keys: ProfileKeys::default(),
+            read_marks: ReadMarks::default(),
             persisted: Persisted {
                 state: key.state_partition()?,
                 sealer,
@@ -117,6 +121,7 @@ impl Client {
         let mut outbox = Outbox::default();
         let mut contacts = Contacts::default();
         let mut profile_keys = ProfileKeys::default();
+        let mut read_marks = ReadMarks::default();
 
         for record in state {
             if record.partition != partition {
@@ -136,6 +141,7 @@ impl Client {
                 OUTBOX => outbox.load(&opened.body)?,
                 VERIFIED => contacts.load(&opened.body)?,
                 PROFILE_KEYS => profile_keys.load(&opened.body)?,
+                READ => read_marks.load(&opened.body)?,
                 _ => return Err(StoreError::Malformed),
             }
         }
@@ -185,6 +191,7 @@ impl Client {
             outbox,
             contacts,
             profile_keys,
+            read_marks,
             persisted: Persisted {
                 sealer,
                 state: partition,
@@ -287,6 +294,7 @@ impl Client {
         changes.append(self.outbox.take());
         changes.append(self.contacts.take());
         changes.append(self.profile_keys.take());
+        changes.append(self.read_marks.take());
         if client_changed {
             *client = record;
         }
@@ -395,6 +403,12 @@ impl Client {
     /// A linked device takes its account's profile key from the grant (story 03-04).
     pub(crate) fn set_profile_key(&mut self, key: ProfileKey) {
         self.profile_key = key;
+    }
+
+    /// The read markers, with what they need to seal their records.
+    pub(crate) fn read_marks_mut(&mut self) -> (&mut ReadMarks, &Sealer, PartitionId) {
+        let Persisted { sealer, state, .. } = &self.persisted;
+        (&mut self.read_marks, sealer, *state)
     }
 
     /// The contacts' profile keys, with what they need to seal their records.

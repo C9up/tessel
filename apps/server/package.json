@@ -43,6 +43,7 @@
     "@c9up/helix-plugin-ream": "^0.1.10",
     "@c9up/ream-cli": "^0.3.20",
     "@swc-node/register": "^1.12.1",
+    "@tessel/messenger": "workspace:*",
     "@types/node": "^24.19.2",
     "typescript": "~6.0.3"
   },

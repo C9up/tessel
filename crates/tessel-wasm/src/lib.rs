@@ -21,9 +21,9 @@ use tessel_core::{
 use wasm_bindgen::prelude::{JsError, JsValue, wasm_bindgen};
 
 use crate::dto::{
-    BodyDto, Commit, DeviceInfo, EncryptedFile, EnvelopeHeaderDto, HistoryEntryDto, IncomingDto,
-    KeyPackageInfo, KeyPackages, LinkGrantDto, OutboundDto, ProfileDto, Queued, RemovalIn,
-    SafetyDto, StoreChanges, StoredRecord, certificate, id16,
+    BodyDto, Commit, ConversationDto, DeviceInfo, EncryptedFile, EnvelopeHeaderDto,
+    HistoryEntryDto, IncomingDto, KeyPackageInfo, KeyPackages, LinkGrantDto, OutboundDto,
+    ProfileDto, Queued, RemovalIn, SafetyDto, StoreChanges, StoredRecord, certificate, id16,
 };
 use crate::error::OrJs as _;
 
@@ -398,6 +398,23 @@ impl Core {
         to_js(&dto::devices(
             &self.client.recipients(&group(group_id)).js()?,
         ))
+    }
+
+    /// The conversation list, the most recently active first (story 05-01).
+    pub fn conversations(&self) -> Result<JsValue, JsValue> {
+        let list: Vec<ConversationDto> = self
+            .client
+            .conversations()
+            .into_iter()
+            .map(ConversationDto::from)
+            .collect();
+        to_js(&list)
+    }
+
+    /// The user read the group up to its last message.
+    #[wasm_bindgen(js_name = markRead)]
+    pub fn mark_read(&mut self, group_id: &[u8]) -> Result<(), JsValue> {
+        self.client.mark_read(&group(group_id)).js()
     }
 
     /// The groups this device is a member of.

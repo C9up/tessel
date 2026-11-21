@@ -28,6 +28,15 @@ export interface KeyPackageUpdate {
   withdraw: Bytes[]
 }
 
+/** A group in the conversation list (story 05-01). */
+export interface ConversationSummary {
+  group: Bytes
+  /** When its last message was sent, the sender's clock, in milliseconds; absent before any. */
+  lastSentAt?: number
+  /** Messages of other accounts not read yet on this device. */
+  unread: number
+}
+
 /** A new device waiting to be linked (story 03-04). */
 export interface LinkRequestInfo {
   /** What the QR code shows: it holds the link's secret, never send it. */
@@ -213,6 +222,10 @@ export interface TesselCore {
   grantLink(qr: Bytes): Promise<LinkGrant>
   /** The groups this device is a member of. */
   groups(): Promise<Bytes[]>
+  /** The conversation list, the most recently active first (story 05-01). */
+  conversations(): Promise<ConversationSummary[]>
+  /** The user read the group up to its last message. */
+  markRead(group: Bytes): Promise<void>
   /** The devices an envelope for the group goes to: every member but this device (story 04-01). */
   recipients(group: Bytes): Promise<Bytes[]>
   /** On the device holding the account key: its signed revocation of another device of the account (story 03-05). */
@@ -286,6 +299,8 @@ export const METHODS = [
   'revokeDevice',
   'groupsWith',
   'recipients',
+  'conversations',
+  'markRead',
   'signAccountDeletion',
   'sealProfile',
   'openProfile',

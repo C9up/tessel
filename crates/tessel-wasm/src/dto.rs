@@ -8,10 +8,10 @@
 use serde::{Deserialize, Serialize};
 use serde_bytes::ByteBuf;
 use tessel_core::{
-    AccountId, Avatar, Body, Content, DeviceCertificate, DeviceId, Effect, EncryptedMedia,
-    EnvelopeHeader, EnvelopeKind, GroupId, HistoryEntry, Incoming, KeyPackageUpdate, MediaRef,
-    MediaSeal, Message, MessageId, Outbound, Outgoing, PartitionId, Profile, ReceiptKind, Record,
-    RecordId, Removal, SafetyNumber, Trust,
+    AccountId, Avatar, Body, Content, Conversation, DeviceCertificate, DeviceId, Effect,
+    EncryptedMedia, EnvelopeHeader, EnvelopeKind, GroupId, HistoryEntry, Incoming,
+    KeyPackageUpdate, MediaRef, MediaSeal, Message, MessageId, Outbound, Outgoing, PartitionId,
+    Profile, ReceiptKind, Record, RecordId, Removal, SafetyNumber, Trust,
 };
 use wasm_bindgen::JsValue;
 
@@ -687,4 +687,25 @@ pub(crate) fn devices(devices: &[DeviceId]) -> Vec<ByteBuf> {
         .iter()
         .map(|device| bytes(device.as_bytes()))
         .collect()
+}
+
+/// A group in the conversation list (story 05-01).
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ConversationDto {
+    group: ByteBuf,
+    /// Milliseconds, the sender's clock; absent before any message.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    last_sent_at: Option<u64>,
+    unread: usize,
+}
+
+impl From<Conversation> for ConversationDto {
+    fn from(conversation: Conversation) -> Self {
+        Self {
+            group: bytes(conversation.group.as_bytes()),
+            last_sent_at: conversation.last_sent_at,
+            unread: conversation.unread,
+        }
+    }
 }

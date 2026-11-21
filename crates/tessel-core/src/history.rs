@@ -119,6 +119,14 @@ struct Recent {
     deleted: bool,
 }
 
+/// A group's place in the conversation list (story 05-01).
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct Summary {
+    pub(crate) last_seq: u64,
+    pub(crate) last_sent_at: Option<u64>,
+    pub(crate) unread: usize,
+}
+
 /// The history index and the records it still has to hand over.
 #[derive(Debug, Default)]
 pub(crate) struct History {
@@ -324,6 +332,24 @@ impl History {
     pub(crate) fn sort(&mut self) {
         for recent in self.recent.values_mut() {
             recent.make_contiguous().sort_by_key(|r| r.seq);
+        }
+    }
+
+    /// What a conversation list shows of a group (story 05-01): the last message's place
+    /// and time, and how many messages of other accounts are at `unread_from` or after
+    /// (within the recent window), deleted ones left out.
+    pub(crate) fn summary(&self, group: &GroupId, own: &AccountId, unread_from: u64) -> Summary {
+        let Some(recent) = self.recent.get(group) else {
+            return Summary::default();
+        };
+        let last = recent.back();
+        Summary {
+            last_seq: last.map_or(0, |entry| entry.seq),
+            last_sent_at: last.map(|entry| entry.sent_at),
+            unread: recent
+                .iter()
+                .filter(|entry| entry.seq >= unread_from && &entry.author != own && !entry.deleted)
+                .count(),
         }
     }
 

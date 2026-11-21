@@ -10,6 +10,7 @@
 
 import { Core, ciphersuite, generateStoreKey, PendingLink, statePartition, verifyKeyPackage, version } from '../generated/tessel_wasm.js'
 import {
+  type ConversationSummary,
   type DeviceInfo,
   type LinkGrant,
   type LinkRequestInfo,
@@ -187,6 +188,14 @@ export class CoreHost implements TesselCore {
 
   recipients(group: Bytes): Promise<Bytes[]> {
     return this.#call((core) => core.recipients(group))
+  }
+
+  conversations(): Promise<ConversationSummary[]> {
+    return this.#call((core) => core.conversations())
+  }
+
+  markRead(group: Bytes): Promise<void> {
+    return this.#call((core) => core.markRead(group))
   }
 
   signAccountDeletion(): Promise<Bytes> {

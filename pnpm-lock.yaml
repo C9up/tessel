@@ -224,6 +224,9 @@ importers:
       '@swc-node/register':
         specifier: ^1.12.1
         version: 1.12.1(@swc/core@1.16.22)(@swc/types@0.1.28)(supports-color@8.1.1)(typescript@6.0.3)
+      '@tessel/messenger':
+        specifier: workspace:*
+        version: link:../../packages/messenger
       '@types/node':
         specifier: ^24.19.2
         version: 24.19.2
@@ -239,6 +242,19 @@ importers:
       fake-indexeddb:
         specifier: 6.2.5
         version: 6.2.5
+      typescript:
+        specifier: ~6.0.3
+        version: 6.0.3
+
+  packages/messenger:
+    dependencies:
+      '@tessel/protocol':
+        specifier: workspace:*
+        version: link:../protocol
+    devDependencies:
+      '@types/node':
+        specifier: ^24.19.2
+        version: 24.19.2
       typescript:
         specifier: ~6.0.3
         version: 6.0.3
