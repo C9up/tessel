@@ -21,4 +21,6 @@ export default await Env.create(new URL('../', import.meta.url), {
   DB_OWNER_USER: Env.schema.string.optional(),
   DB_OWNER_PASSWORD: Env.schema.string.optional(),
   REDIS_URL: Env.schema.string(),
+  // Days an envelope stays at most, acknowledged or not (story 04-04). Default 30.
+  DELIVERY_RETENTION_DAYS: Env.schema.number().optional(),
 })

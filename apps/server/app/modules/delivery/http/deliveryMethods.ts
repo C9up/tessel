@@ -1,7 +1,7 @@
 import { ThrottleException } from '@c9up/blackhole'
 import limiter from '@c9up/blackhole/services/limiter'
 import type { HttpContext } from '@c9up/ream'
-import { type EnvelopeSent, type Envelopes, fromBase64Url, toBase64Url } from '@tessel/protocol'
+import { type Acknowledged, type EnvelopeSent, type Envelopes, fromBase64Url, toBase64Url } from '@tessel/protocol'
 import { RpcFailure } from '#modules/shared/http/rpc.js'
 import type { Mailbox } from '../application/Mailbox.js'
 import { DeliveryError, MAX_ENVELOPE, MAX_RECIPIENTS, type OutgoingEnvelope } from '../domain/envelope.js'
@@ -57,7 +57,7 @@ function refused(error: unknown): never {
 export function deliveryMethods(deps: {
   mailbox: () => Promise<Mailbox>
   guard: (ctx: HttpContext) => Promise<CallingDevice>
-}): Record<'send' | 'fetch', Handler> {
+}): Record<'send' | 'fetch' | 'ack', Handler> {
   return {
     send: async (ctx, params) => {
       const device = await deps.guard(ctx)
@@ -86,6 +86,19 @@ export function deliveryMethods(deps: {
               : { id: envelope.id, seq: envelope.seq, envelope: toBase64Url(envelope.body) },
           ),
         } satisfies Envelopes
+      } catch (error) {
+        refused(error)
+      }
+    },
+
+    ack: async (ctx, params) => {
+      const device = await deps.guard(ctx)
+      try {
+        // As often as fetches: the inbox acknowledges after each batch it fetched.
+        await limiter.use(FETCHES).consume(`delivery_ack_${hex(device.deviceId)}`)
+        const through = isRecord(params) ? params.through : undefined
+        if (typeof through !== 'string' || !/^\d{1,19}$/.test(through)) throw new RpcFailure('E_INVALID_PARAMS')
+        return { acknowledged: await (await deps.mailbox()).ack(device.deviceId, through) } satisfies Acknowledged
       } catch (error) {
         refused(error)
       }

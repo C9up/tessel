@@ -41,6 +41,16 @@ export class Mailbox {
     return placed
   }
 
+  /** `device` handled every envelope up to `through`: the server lets them go. */
+  ack(device: Uint8Array, through: string): Promise<number> {
+    return this.#mailboxes.ack(device, through)
+  }
+
+  /** The purge (story 04-04): what was kept for more than `retentionDays` goes. */
+  purge(retentionDays: number): Promise<number> {
+    return this.#mailboxes.purge(retentionDays)
+  }
+
   /** The envelopes for `device` after `after`, oldest first. */
   fetch(device: Uint8Array, after: string | null): Promise<StoredEnvelope[]> {
     return this.#mailboxes.fetch(device, after, FETCH_LIMIT)

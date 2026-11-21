@@ -28,17 +28,18 @@ export function parseRing(data: unknown): Ring | undefined {
 
 /**
  * A device's inbox: it hands each envelope to `deliver` once, in order, and moves its
- * cursor only once `deliver` resolved. The app persists the cursor (`cursor`) and
- * gives it back on the next start.
+ * cursor only once `deliver` resolved; after each batch it acknowledges the cursor, and
+ * the server lets those envelopes go. The app persists the cursor (`cursor`) and gives
+ * it back on the next start.
  */
 export class Inbox {
-  readonly #client: Pick<TesselClient, 'fetch'>
+  readonly #client: Pick<TesselClient, 'fetch' | 'ack'>
   readonly #deliver: (envelope: ReceivedEnvelope) => Promise<void>
   #cursor: string | undefined
   #draining: Promise<void> | null = null
   #again = false
 
-  constructor(client: Pick<TesselClient, 'fetch'>, deliver: (envelope: ReceivedEnvelope) => Promise<void>, cursor?: string) {
+  constructor(client: Pick<TesselClient, 'fetch' | 'ack'>, deliver: (envelope: ReceivedEnvelope) => Promise<void>, cursor?: string) {
     this.#client = client
     this.#deliver = deliver
     this.#cursor = cursor
@@ -80,6 +81,9 @@ export class Inbox {
           this.#cursor = envelope.id
         }
         if (envelopes.length === 0) break
+        // Handled: the server may let them go (story 04-04). The acknowledgement comes
+        // after the batch, never before an envelope was handled.
+        if (this.#cursor !== undefined) await this.#client.ack(this.#cursor)
       }
     } while (this.#again)
   }

@@ -32,6 +32,7 @@ export const Method = {
   deleteAccount: 'identity.deleteAccount',
   send: 'delivery.send',
   fetch: 'delivery.fetch',
+  ack: 'delivery.ack',
 } as const
 
 /**
@@ -427,6 +428,23 @@ export function parseEnvelopeSent(data: unknown): EnvelopeSent {
 
 const isSeq = (value: unknown): value is number => typeof value === 'number' && Number.isSafeInteger(value) && value > 0
 
+/** Parameters of `delivery.ack`: every envelope up to `through` was handled. */
+export interface AckParams {
+  readonly through: string
+}
+
+/** Response of `delivery.ack`. */
+export interface Acknowledged {
+  /** How many of this device's envelopes the server let go. */
+  readonly acknowledged: number
+}
+
+export function parseAcknowledged(data: unknown): Acknowledged {
+  if (isRecord(data) && typeof data.acknowledged === 'number' && Number.isSafeInteger(data.acknowledged) && data.acknowledged >= 0)
+    return { acknowledged: data.acknowledged }
+  throw new ProtocolError('E_PROTOCOL_BAD_RESULT', Method.ack)
+}
+
 export function parseEnvelopes(data: unknown): Envelopes {
   if (isRecord(data) && Array.isArray(data.envelopes)) {
     const envelopes: ReceivedEnvelope[] = []
@@ -516,6 +534,8 @@ export interface TesselClient {
   send(sendId: Uint8Array, envelope: Uint8Array, recipients: readonly Uint8Array[], signal?: AbortSignal): Promise<EnvelopeSent>
   /** The envelopes for this device after `after`, oldest first. */
   fetch(after?: string, signal?: AbortSignal): Promise<Envelopes>
+  /** Every envelope up to `through` was handled: the server lets them go (story 04-04). */
+  ack(through: string, signal?: AbortSignal): Promise<Acknowledged>
 }
 
 export function createTesselClient(transport: RpcTransport, url = '/rpc'): TesselClient {
@@ -564,6 +584,7 @@ export function createTesselClient(transport: RpcTransport, url = '/rpc'): Tesse
         signal,
       }),
     fetch: (after, signal) => rpc.call(Method.fetch, (after === undefined ? {} : { after }) satisfies FetchParams, { parse: parseEnvelopes, signal }),
+    ack: (through, signal) => rpc.call(Method.ack, { through } satisfies AckParams, { parse: parseAcknowledged, signal }),
     deleteAccount: (deletion, signal) =>
       rpc.call(Method.deleteAccount, { deletion: toBase64Url(deletion) } satisfies DeleteAccountParams, { parse: parseAccountDeleted, signal }),
     revokeDevice: (device, revocation, signal) => {

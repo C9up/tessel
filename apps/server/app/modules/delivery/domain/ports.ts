@@ -27,4 +27,12 @@ export interface Mailboxes {
   store(sender: Uint8Array, sendId: Uint8Array, header: EnvelopeHeader, body: Uint8Array, recipients: readonly Uint8Array[]): Promise<Placed | null>
   /** The envelopes for `device` that came after `after`, oldest first, at most `limit`. */
   fetch(device: Uint8Array, after: string | null, limit: number): Promise<StoredEnvelope[]>
+  /**
+   * `device` has handled every envelope up to `through` (story 04-04). Those nobody
+   * else waits for lose their body and header, keeping their deduplication key until
+   * the purge. How many of the device's envelopes were acknowledged.
+   */
+  ack(device: Uint8Array, through: string): Promise<number>
+  /** Removes every envelope kept for more than `retentionDays`, acknowledged or not; how many. */
+  purge(retentionDays: number): Promise<number>
 }

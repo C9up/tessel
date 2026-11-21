@@ -1,13 +1,15 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import type { Envelopes, ReceivedEnvelope } from './index.ts'
+import type { Acknowledged, Envelopes, ReceivedEnvelope } from './index.ts'
 import { deviceChannel, Inbox, parseRing, readSse } from './realtime.ts'
 
 /** A mailbox holding envelopes `1`…`count()`, handed out two at a time as `delivery.fetch` does. */
 function mailbox(count: () => number) {
   let fetches = 0
+  const acks: string[] = []
   return {
     fetches: () => fetches,
+    acks,
     client: {
       fetch: async (after?: string): Promise<Envelopes> => {
         fetches++
@@ -16,9 +18,23 @@ function mailbox(count: () => number) {
         for (let id = from + 1; id <= Math.min(count(), from + 2); id++) envelopes.push({ id: String(id), envelope: 'AQID' })
         return { envelopes }
       },
+      ack: async (through: string): Promise<Acknowledged> => {
+        acks.push(through)
+        return { acknowledged: 2 }
+      },
     },
   }
 }
+
+test('the inbox acknowledges each batch once handled, never before', async () => {
+  const { client, acks } = mailbox(() => 5)
+  const inbox = new Inbox(client, async (envelope) => {
+    if (envelope.id === '5') throw new Error('the app could not handle it')
+  })
+  await assert.rejects(inbox.drain())
+  // Batches 1-2 and 3-4 were handled and acknowledged; 5 was not.
+  assert.deepEqual(acks, ['2', '4'])
+})
 
 test('the inbox hands every envelope once, in order, from its cursor', async () => {
   let count = 5

@@ -113,6 +113,36 @@ export class SqlMailboxes implements Mailboxes {
     return row === undefined ? null : placedOf(row)
   }
 
+  async ack(device: Uint8Array, through: string): Promise<number> {
+    // One statement: the device's deliveries up to `through` go; the envelopes among
+    // them that nobody else waits for keep only their deduplication key and place.
+    const [row] = await this.#db.query<{ acknowledged: string }>(
+      `WITH acked AS (
+         DELETE FROM deliveries WHERE device_id = decode($1, 'hex') AND envelope_id <= $2::bigint
+         RETURNING envelope_id
+       ), emptied AS (
+         UPDATE envelopes e SET body = NULL, kind = NULL, group_id = NULL, epoch = NULL
+          WHERE e.id IN (SELECT envelope_id FROM acked)
+            AND NOT EXISTS (
+              SELECT 1 FROM deliveries d
+               WHERE d.envelope_id = e.id AND d.device_id <> decode($1, 'hex'))
+       )
+       SELECT count(*)::text AS acknowledged FROM acked`,
+      [hex(device), through],
+    )
+    return Number(row?.acknowledged ?? 0)
+  }
+
+  async purge(retentionDays: number): Promise<number> {
+    // Their deliveries go with them (ON DELETE CASCADE).
+    const [row] = await this.#db.query<{ purged: string }>(
+      `WITH gone AS (DELETE FROM envelopes WHERE created_on < current_date - $1::int RETURNING 1)
+       SELECT count(*)::text AS purged FROM gone`,
+      [retentionDays],
+    )
+    return Number(row?.purged ?? 0)
+  }
+
   async fetch(device: Uint8Array, after: string | null, limit: number): Promise<StoredEnvelope[]> {
     const rows = await this.#db.query<EnvelopeRow>(
       `SELECT e.id::text AS id, e.seq::text AS seq, e.kind, encode(e.group_id, 'hex') AS group_id, e.epoch::text AS epoch, encode(e.body, 'hex') AS body
