@@ -1,4 +1,5 @@
 import type { CertifiedDevice, NewAccount } from './account.js'
+import type { ClaimedKeyPackage, StoredKeyPackage, VerifiedKeyPackage } from './keyPackages.js'
 import type { KnownDevice } from './session.js'
 
 /** Checks a device certificate's signature: the core does, never this server's code. */
@@ -40,4 +41,27 @@ export interface Sessions {
   find(token: string): Promise<{ deviceId: Uint8Array } | null>
   /** Closes the session behind `token`; whether there was one. */
   close(token: string): Promise<boolean>
+}
+
+/** Checks a KeyPackage: the core does (signatures, suite, device certificate). */
+export interface KeyPackageVerifier {
+  /** `null` when it is not a valid KeyPackage of Tessel's suite. */
+  verify(keyPackage: Uint8Array): VerifiedKeyPackage | null
+}
+
+/** The KeyPackage directory. */
+export interface KeyPackages {
+  /**
+   * In one transaction: withdraws `withdraw`, replaces the last-resort KeyPackage when a
+   * new one comes, adds `publish`. Answers the single-use stock after.
+   */
+  store(deviceId: Uint8Array, upload: { publish: StoredKeyPackage[]; lastResort?: StoredKeyPackage; withdraw: readonly Uint8Array[] }): Promise<number>
+  /** The single-use KeyPackages the device has left, still valid. */
+  stock(deviceId: Uint8Array): Promise<number>
+  /**
+   * One KeyPackage for each live device of account `name` but `except`: a single-use one,
+   * deleted as it is handed out (never twice, even to concurrent claims), else the
+   * last-resort one. A device with neither is left out.
+   */
+  claim(name: string, except: Uint8Array): Promise<ClaimedKeyPackage[]>
 }

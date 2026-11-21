@@ -30,7 +30,8 @@ export class SqlDevices implements Devices {
   }
 
   async revoke(deviceId: Uint8Array): Promise<boolean> {
-    // One statement, so one transaction: no revoked device keeps a session.
+    // One statement, so one transaction: no revoked device keeps a session, nor
+    // KeyPackages for anyone to add it to a group with (story 03-03).
     const [row] = await this.#db.query<{ revoked: string }>(
       `WITH revoked AS (
          UPDATE devices SET revoked_on = current_date
@@ -38,6 +39,8 @@ export class SqlDevices implements Devices {
          RETURNING id
        ), closed AS (
          DELETE FROM sessions WHERE device_id IN (SELECT id FROM revoked)
+       ), unlisted AS (
+         DELETE FROM key_packages WHERE device_id IN (SELECT id FROM revoked)
        )
        SELECT count(*)::text AS revoked FROM revoked`,
       [hex(deviceId)],

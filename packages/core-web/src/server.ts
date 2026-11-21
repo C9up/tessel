@@ -8,7 +8,15 @@
  */
 
 import { readFileSync } from 'node:fs'
-import { Core, generateStoreKey, initSync, selfCheck, verifyCertificate as verify, verifySignIn } from '../generated/tessel_wasm.js'
+import {
+  Core,
+  generateStoreKey,
+  initSync,
+  selfCheck,
+  verifyCertificate as verify,
+  verifyKeyPackage as verifyPackage,
+  verifySignIn,
+} from '../generated/tessel_wasm.js'
 
 /** A device, as its verified certificate names it. */
 export interface CertifiedDevice {
@@ -55,12 +63,42 @@ export function checkSignIn(certificate: Uint8Array, challenge: Uint8Array, proo
   }
 }
 
+/** A *KeyPackage*, as its signatures, suite and device certificate check out (story 03-03). */
+export interface CheckedKeyPackage {
+  /** The device that made it. */
+  device: CertifiedDevice
+  /** Its `KeyPackageRef`. */
+  reference: Uint8Array<ArrayBuffer>
+  lastResort: boolean
+  /** The end of its validity, in Unix seconds. */
+  notAfter: number
+}
+
+/** The *KeyPackage* checked by the core; `undefined` when it is not a valid one. */
+export function checkKeyPackage(keyPackage: Uint8Array): CheckedKeyPackage | undefined {
+  loadServerCore()
+  try {
+    return verifyPackage(keyPackage)
+  } catch {
+    return undefined
+  }
+}
+
+/** What a device sends the directory after renewing its pool: `TesselCore.refreshKeyPackages`. */
+export interface KeyPackageBatch {
+  publish: Uint8Array<ArrayBuffer>[]
+  lastResort?: Uint8Array<ArrayBuffer>
+  withdraw: Uint8Array<ArrayBuffer>[]
+}
+
 /** For tests only: a throwaway account's first device, as an app holds it. */
 export interface ThrowawayDevice {
   readonly certificate: Uint8Array<ArrayBuffer>
   readonly deviceId: Uint8Array<ArrayBuffer>
   /** The proof `TesselCore.signIn` makes. */
   signIn(challenge: Uint8Array): Uint8Array
+  /** Its *KeyPackage* pool renewed at `now` (Unix seconds), as `TesselCore.refreshKeyPackages` gives it. */
+  refreshKeyPackages(now: number): KeyPackageBatch
   /** Drops its keys. */
   free(): void
 }
@@ -76,6 +114,7 @@ export function throwawayDevice(account: string): ThrowawayDevice {
     certificate: device.certificate,
     deviceId: device.deviceId,
     signIn: (challenge) => core.signIn(challenge),
+    refreshKeyPackages: (now) => core.refreshKeyPackages(now),
     free: () => core.free(),
   }
 }

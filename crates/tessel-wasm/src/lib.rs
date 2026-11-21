@@ -70,6 +70,7 @@ pub fn verify(key_package: &[u8]) -> Result<JsValue, JsValue> {
         device: DeviceInfo::of(verified.certificate())?,
         reference: ByteBuf::from(verified.reference().to_vec()),
         last_resort: verified.is_last_resort(),
+        not_after: verified.not_after(),
     })
 }
 

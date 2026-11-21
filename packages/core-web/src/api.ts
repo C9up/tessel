@@ -33,6 +33,8 @@ export interface KeyPackageInfo {
   device: DeviceInfo
   reference: Bytes
   lastResort: boolean
+  /** The end of its validity, in Unix seconds. */
+  notAfter: number
 }
 
 /** A commit for the members, and the *Welcome* for the added devices. */

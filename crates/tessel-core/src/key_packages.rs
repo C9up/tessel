@@ -265,6 +265,11 @@ impl VerifiedKeyPackage {
     pub fn is_last_resort(&self) -> bool {
         self.key_package.last_resort()
     }
+
+    /// The end of its validity (Unix seconds): the directory hands it out no later.
+    pub fn not_after(&self) -> u64 {
+        self.key_package.life_time().not_after()
+    }
 }
 
 /// Parses and verifies a *KeyPackage* serialized as `MLSMessage`.

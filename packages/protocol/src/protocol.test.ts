@@ -7,6 +7,8 @@ import {
   ProtocolError,
   parseAccountCreated,
   parseChallenge,
+  parseClaimedKeyPackages,
+  parseKeyPackageStock,
   parsePong,
   parseSession,
   parseSignedIn,
@@ -79,4 +81,14 @@ test('the fetch transport sends the session token in a header, never in the body
   assert.equal(seen[0]?.authorization, null)
   assert.equal(seen[1]?.authorization, 'Bearer tsn_abc.def')
   assert.ok(!seen[1]?.body.includes('tsn_'))
+})
+
+test('directory answers are checked', () => {
+  assert.deepEqual(parseKeyPackageStock({ stock: 3, low: true }), { stock: 3, low: true })
+  assert.throws(() => parseKeyPackageStock({ stock: '3', low: true }), ProtocolError)
+  const claimed = { keyPackages: [{ device: 'AAAA', keyPackage: 'BBBB' }] }
+  assert.deepEqual(parseClaimedKeyPackages(claimed), claimed)
+  assert.deepEqual(parseClaimedKeyPackages({ keyPackages: [] }), { keyPackages: [] })
+  assert.throws(() => parseClaimedKeyPackages({ keyPackages: [{ device: 'AAAA' }] }), ProtocolError)
+  assert.throws(() => parseClaimedKeyPackages({}), ProtocolError)
 })

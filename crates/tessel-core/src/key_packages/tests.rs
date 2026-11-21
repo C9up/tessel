@@ -37,7 +37,8 @@ fn consume(client: &Client, key_package: &VerifiedKeyPackage) {
 #[test]
 fn the_first_renewal_fills_the_pool_and_the_last_resort() {
     let mut client = client();
-    let update = client.refresh_key_packages(now()).unwrap();
+    let at = now();
+    let update = client.refresh_key_packages(at).unwrap();
     assert_eq!(update.publish.len(), KEY_PACKAGE_POOL);
     assert!(update.withdraw.is_empty());
 
@@ -45,6 +46,8 @@ fn the_first_renewal_fills_the_pool_and_the_last_resort() {
     assert!(last_resort.is_last_resort());
     let one_time = verify_key_package(&update.publish[0]).unwrap();
     assert!(!one_time.is_last_resort());
+    // The directory (story 03-03) hands it out until the end of its lifetime.
+    assert_eq!(one_time.not_after(), at + KEY_PACKAGE_LIFETIME);
     assert_eq!(
         one_time.certificate(),
         client.device().certificate(),

@@ -143,6 +143,8 @@ pub(crate) struct KeyPackageInfo {
     pub(crate) device: DeviceInfo,
     pub(crate) reference: ByteBuf,
     pub(crate) last_resort: bool,
+    /// Unix seconds.
+    pub(crate) not_after: u64,
 }
 
 #[derive(Serialize)]

@@ -20,6 +20,9 @@ export const Method = {
   signIn: 'identity.signIn',
   session: 'identity.session',
   signOut: 'identity.signOut',
+  publishKeyPackages: 'identity.publishKeyPackages',
+  keyPackageStock: 'identity.keyPackageStock',
+  claimKeyPackages: 'identity.claimKeyPackages',
 } as const
 
 /**
@@ -43,6 +46,13 @@ export const ServerError = {
   E_IDENTITY_SIGN_IN_REFUSED: -32001,
   /** The call needs a session, and none is valid: missing, expired, closed, or its device revoked. */
   E_UNAUTHENTICATED: -32001,
+  /**
+   * A KeyPackage is not valid, no longer valid, of the wrong kind, or not this device's
+   * own; or the upload is too large. Nothing of the upload was kept.
+   */
+  E_IDENTITY_INVALID_KEY_PACKAGE: -32602,
+  /** The device already keeps as many KeyPackages as the directory takes. */
+  E_IDENTITY_KEY_PACKAGE_STOCK_FULL: -32010,
   /** Too many calls from this network: wait, then try again. */
   E_TOO_MANY_REQUESTS: -32029,
 } as const
@@ -113,6 +123,41 @@ export interface SignedOut {
   readonly signedOut: true
 }
 
+/** Parameters of `identity.publishKeyPackages`: `TesselCore.refreshKeyPackages`, base64url. */
+export interface PublishKeyPackagesParams {
+  readonly publish: readonly string[]
+  readonly lastResort?: string
+  /** References of the KeyPackages to withdraw. */
+  readonly withdraw: readonly string[]
+}
+
+/** Response of `identity.publishKeyPackages` and `identity.keyPackageStock`. */
+export interface KeyPackageStock {
+  /** Single-use KeyPackages the device has left in the directory. */
+  readonly stock: number
+  /** Whether the device should renew its pool now. */
+  readonly low: boolean
+}
+
+/** Parameters of `identity.claimKeyPackages`. */
+export interface ClaimKeyPackagesParams {
+  /** `name@domain`. */
+  readonly account: string
+}
+
+/** A KeyPackage handed out for one device. */
+export interface ClaimedKeyPackage {
+  /** base64url of the device identifier. */
+  readonly device: string
+  /** base64url; for `TesselCore.addDevices`, after `TesselCore.verifyKeyPackage`. */
+  readonly keyPackage: string
+}
+
+/** Response of `identity.claimKeyPackages`: one KeyPackage per device of the account, none for an unknown one. */
+export interface ClaimedKeyPackages {
+  readonly keyPackages: readonly ClaimedKeyPackage[]
+}
+
 /** Response of `system.ping`: the server is there, and says which protocol it speaks. */
 export interface Pong {
   readonly pong: true
@@ -168,6 +213,30 @@ export function parseSignedOut(data: unknown): SignedOut {
   throw new ProtocolError('E_PROTOCOL_BAD_RESULT', Method.signOut)
 }
 
+export function parseKeyPackageStock(data: unknown): KeyPackageStock {
+  if (isRecord(data) && typeof data.stock === 'number' && typeof data.low === 'boolean') return { stock: data.stock, low: data.low }
+  throw new ProtocolError('E_PROTOCOL_BAD_RESULT', Method.keyPackageStock)
+}
+
+export function parseClaimedKeyPackages(data: unknown): ClaimedKeyPackages {
+  if (isRecord(data) && Array.isArray(data.keyPackages)) {
+    const keyPackages: ClaimedKeyPackage[] = []
+    for (const entry of data.keyPackages) {
+      if (!isRecord(entry) || typeof entry.device !== 'string' || typeof entry.keyPackage !== 'string') break
+      keyPackages.push({ device: entry.device, keyPackage: entry.keyPackage })
+    }
+    if (keyPackages.length === data.keyPackages.length) return { keyPackages }
+  }
+  throw new ProtocolError('E_PROTOCOL_BAD_RESULT', Method.claimKeyPackages)
+}
+
+/** What a device sends the directory: `TesselCore.refreshKeyPackages`. */
+export interface KeyPackageUpdate {
+  readonly publish: readonly Uint8Array[]
+  readonly lastResort?: Uint8Array
+  readonly withdraw: readonly Uint8Array[]
+}
+
 /** What a client (web or mobile) can ask of the server. */
 export interface TesselClient {
   ping(signal?: AbortSignal): Promise<Pong>
@@ -181,6 +250,12 @@ export interface TesselClient {
   session(signal?: AbortSignal): Promise<Session>
   /** Closes the transport's session. */
   signOut(signal?: AbortSignal): Promise<SignedOut>
+  /** Leaves this device's renewed KeyPackages in the directory, all or nothing. */
+  publishKeyPackages(update: KeyPackageUpdate, signal?: AbortSignal): Promise<KeyPackageStock>
+  /** This device's stock in the directory. */
+  keyPackageStock(signal?: AbortSignal): Promise<KeyPackageStock>
+  /** One KeyPackage per device of `account`, this device left out: each is handed out once. */
+  claimKeyPackages(account: string, signal?: AbortSignal): Promise<ClaimedKeyPackages>
 }
 
 export function createTesselClient(transport: RpcTransport, url = '/rpc'): TesselClient {
@@ -201,6 +276,17 @@ export function createTesselClient(transport: RpcTransport, url = '/rpc'): Tesse
       }),
     session: (signal) => rpc.call(Method.session, {}, { parse: parseSession, signal }),
     signOut: (signal) => rpc.call(Method.signOut, {}, { parse: parseSignedOut, signal }),
+    publishKeyPackages: (update, signal) => {
+      const params: PublishKeyPackagesParams = {
+        publish: update.publish.map(toBase64Url),
+        withdraw: update.withdraw.map(toBase64Url),
+        ...(update.lastResort === undefined ? {} : { lastResort: toBase64Url(update.lastResort) }),
+      }
+      return rpc.call(Method.publishKeyPackages, params, { parse: parseKeyPackageStock, signal })
+    },
+    keyPackageStock: (signal) => rpc.call(Method.keyPackageStock, {}, { parse: parseKeyPackageStock, signal }),
+    claimKeyPackages: (account, signal) =>
+      rpc.call(Method.claimKeyPackages, { account } satisfies ClaimKeyPackagesParams, { parse: parseClaimedKeyPackages, signal }),
   }
 }
 
