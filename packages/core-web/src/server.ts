@@ -15,6 +15,7 @@ import {
   PendingLink,
   selfCheck,
   verifyCertificate as verify,
+  verifyAccountDeletion,
   verifyKeyPackage as verifyPackage,
   verifyRevocation,
   verifySignIn,
@@ -79,6 +80,17 @@ export function checkRevocation(account: string, deviceId: Uint8Array, accountKe
   }
 }
 
+/** Whether `deletion` is the signature, by `accountKey` (the one the server keeps), deleting `account` (story 03-07). */
+export function checkAccountDeletion(account: string, accountKey: Uint8Array, deletion: Uint8Array): boolean {
+  loadServerCore()
+  try {
+    verifyAccountDeletion(account, accountKey, deletion)
+    return true
+  } catch {
+    return false
+  }
+}
+
 /** A *KeyPackage*, as its signatures, suite and device certificate check out (story 03-03). */
 export interface CheckedKeyPackage {
   /** The device that made it. */
@@ -119,6 +131,8 @@ export interface ThrowawayDevice {
   grantLink(qr: Uint8Array): { link: Uint8Array<ArrayBuffer>; certificate: Uint8Array<ArrayBuffer>; grant: Uint8Array<ArrayBuffer> }
   /** `TesselCore.revokeDevice`: on an account's first device, it revokes another one. */
   revokeDevice(deviceId: Uint8Array): Uint8Array
+  /** `TesselCore.signAccountDeletion`. */
+  signAccountDeletion(): Uint8Array
   /** `TesselCore.sealProfile`. */
   sealProfile(profile: { name: string }): Uint8Array
   /** `TesselCore.openProfile`: the display name, or `undefined` when it does not open. */
@@ -136,6 +150,7 @@ function throwaway(core: Core): ThrowawayDevice {
     refreshKeyPackages: (now) => core.refreshKeyPackages(now),
     grantLink: (qr) => core.grantLink(qr),
     revokeDevice: (deviceId) => core.revokeDevice(deviceId),
+    signAccountDeletion: () => core.signAccountDeletion(),
     sealProfile: (profile) => core.sealProfile(profile),
     openProfileName: (account, blob) => {
       try {

@@ -6,11 +6,13 @@ import { AccountDevices } from '#modules/identity/application/AccountDevices.js'
 import { AccountProfiles } from '#modules/identity/application/AccountProfiles.js'
 import { Authenticate } from '#modules/identity/application/Authenticate.js'
 import { CreateAccount } from '#modules/identity/application/CreateAccount.js'
+import { DeleteAccount } from '#modules/identity/application/DeleteAccount.js'
 import { KeyPackageDirectory } from '#modules/identity/application/KeyPackageDirectory.js'
 import { LinkDevice } from '#modules/identity/application/LinkDevice.js'
 import { SignIn } from '#modules/identity/application/SignIn.js'
 import { identityMethods } from '#modules/identity/http/identityMethods.js'
 import { coreCertificates } from '#modules/identity/infrastructure/coreCertificates.js'
+import { coreDeletions } from '#modules/identity/infrastructure/coreDeletions.js'
 import { coreKeyPackages } from '#modules/identity/infrastructure/coreKeyPackages.js'
 import { coreRevocations } from '#modules/identity/infrastructure/coreRevocations.js'
 import { coreSignIns } from '#modules/identity/infrastructure/coreSignIns.js'
@@ -31,17 +33,20 @@ interface Identity {
   link: LinkDevice
   devices: AccountDevices
   profiles: AccountProfiles
+  deleteAccount: DeleteAccount
 }
 
-/** The identity module's use cases (03-01 to 03-06), composed once, on first use. */
+/** The identity module's use cases (03-01 to 03-07), composed once, on first use. */
 let composed: Promise<Identity> | null = null
 function identity(): Promise<Identity> {
   composed ??= app.container.make<AsyncDatabaseConnection>('db').then((db) => {
     const domain = env.get('APP_DOMAIN')
     const devices = new SqlDevices(db)
     const sessions = new WardenSessions(db)
+    const accounts = new SqlAccounts(db)
     return {
-      createAccount: new CreateAccount(coreCertificates, new SqlAccounts(db), domain),
+      createAccount: new CreateAccount(coreCertificates, accounts, domain),
+      deleteAccount: new DeleteAccount(devices, accounts, coreDeletions),
       signIn: new SignIn(keyDbChallenges, devices, coreSignIns, sessions),
       authenticate: new Authenticate(sessions, devices, domain),
       directory: new KeyPackageDirectory(coreKeyPackages, devices, new SqlKeyPackages(db), domain),
@@ -62,6 +67,7 @@ export const identityDeps = {
   link: async () => (await identity()).link,
   devices: async () => (await identity()).devices,
   profiles: async () => (await identity()).profiles,
+  deleteAccount: async () => (await identity()).deleteAccount,
 }
 
 /** The identity module's RPC points. */
@@ -81,4 +87,5 @@ export function registerIdentityMethods(rpc: RpcRouter): void {
   rpc.method(Method.revokeDevice, points.revokeDevice)
   rpc.method(Method.setProfile, points.setProfile)
   rpc.method(Method.profile, points.profile)
+  rpc.method(Method.deleteAccount, points.deleteAccount)
 }

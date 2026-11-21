@@ -105,6 +105,52 @@ pub fn verify_revocation(
         .map_err(|_| IdentityError::BadSignature)
 }
 
+/// Signature label of an account deletion (story 03-07).
+const DELETION_LABEL: &[u8] = b"Tessel 1.0 AccountDeletion";
+
+/// Account deletion format version.
+const DELETION_VERSION: u8 = 1;
+
+/// What the account key signs to delete its account. A name freed later goes to another
+/// account key: a deletion replayed then does not verify.
+#[derive(TlsSerialize, TlsSize)]
+struct DeletionContent {
+    version: u8,
+    account: TlsByteVecU16,
+}
+
+fn deletion_to_be_signed(account: &AccountId) -> Result<Vec<u8>, IdentityError> {
+    let content = DeletionContent {
+        version: DELETION_VERSION,
+        account: account.to_string().into_bytes().into(),
+    }
+    .tls_serialize_detached()
+    .map_err(|_| IdentityError::Crypto)?;
+    SignContent {
+        label: VLByteSlice(DELETION_LABEL),
+        content: VLByteSlice(&content),
+    }
+    .tls_serialize_detached()
+    .map_err(|_| IdentityError::Crypto)
+}
+
+/// Checks that `signature` is the deletion of `account` by `account_key`, the key the
+/// caller knows for the account.
+pub fn verify_account_deletion(
+    account: &AccountId,
+    account_key: &[u8],
+    signature: &[u8],
+) -> Result<(), IdentityError> {
+    RustCrypto::default()
+        .verify_signature(
+            SCHEME,
+            &deletion_to_be_signed(account)?,
+            account_key,
+            signature,
+        )
+        .map_err(|_| IdentityError::BadSignature)
+}
+
 /// Size of an Ed25519 public key.
 const PUBLIC_KEY_LEN: usize = 32;
 
@@ -336,6 +382,12 @@ impl AccountKey {
         let signature = self.0.sign(&certificate.to_be_signed()?)?;
         certificate.signature = signature.try_into().map_err(|_| IdentityError::Crypto)?;
         Ok(certificate)
+    }
+
+    /// Deletes `account` (story 03-07): the statement the server checks with
+    /// [`verify_account_deletion`].
+    pub fn delete_account(&self, account: &AccountId) -> Result<Vec<u8>, IdentityError> {
+        self.0.sign(&deletion_to_be_signed(account)?)
     }
 
     /// Revokes `device` of `account` (story 03-05): the statement the server and the

@@ -236,6 +236,14 @@ impl Client {
         Ok(account_key.revoke(self.device.certificate().account(), device)?)
     }
 
+    /// The account key's deletion of this account (story 03-07), for the server. Before
+    /// sending it, the device leaves each of its groups ([`Client::leave_group`]): once
+    /// the account is gone, it can no longer reach them.
+    pub fn sign_account_deletion(&self) -> Result<Vec<u8>, LinkError> {
+        let account_key = self.account_key().ok_or(LinkError::NoAccountKey)?;
+        Ok(account_key.delete_account(self.device.certificate().account())?)
+    }
+
     /// The groups `device` is a member of: those to remove it from once revoked.
     pub fn groups_with(&self, device: DeviceId) -> Vec<GroupId> {
         let account = self.device.certificate().account();

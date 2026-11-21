@@ -217,6 +217,8 @@ export interface TesselCore {
   revokeDevice(deviceId: Bytes): Promise<Bytes>
   /** The groups a device of the account is in: to remove it from (`removeDevices`) once revoked. */
   groupsWith(deviceId: Bytes): Promise<Bytes[]>
+  /** On the device holding the account key: the deletion of the account, for `identity.deleteAccount` (story 03-07). Leave every group first. */
+  signAccountDeletion(): Promise<Bytes>
 
   /** Seals this account's profile under its profile key: the blob for `identity.setProfile` (story 03-06). */
   sealProfile(profile: Profile): Promise<Bytes>
@@ -281,6 +283,7 @@ export const METHODS = [
   'groups',
   'revokeDevice',
   'groupsWith',
+  'signAccountDeletion',
   'sealProfile',
   'openProfile',
   'knowsProfile',

@@ -20,9 +20,12 @@ export class SqlAccounts implements Accounts {
     // One statement, so one transaction: no account without its device. A name or an
     // account key already there inserts nothing, and nothing comes back.
     const [row] = await this.#db.query<{ id: string }>(
-      `WITH account AS (
+      `WITH expired AS (
+         DELETE FROM reserved_names WHERE reserved_until <= current_date
+       ), account AS (
          INSERT INTO accounts (name, account_key)
-         VALUES ($1, decode($2, 'hex'))
+         SELECT $1, decode($2, 'hex')
+          WHERE NOT EXISTS (SELECT 1 FROM reserved_names WHERE name = $1 AND reserved_until > current_date)
          ON CONFLICT DO NOTHING
          RETURNING id
        ), device AS (
@@ -34,5 +37,25 @@ export class SqlAccounts implements Accounts {
       [account.name, hex(account.device.accountKey), hex(account.device.deviceId), hex(account.device.deviceKey), hex(account.device.certificate)],
     )
     return row ?? null
+  }
+
+  async delete(accountId: string, name: string, reservedDays: number): Promise<boolean> {
+    // One statement, so one transaction: the account goes with everything that hangs
+    // from it (devices, sessions, KeyPackages, profile: ON DELETE CASCADE), its name is
+    // reserved, and reservations past their day are cleared on the way.
+    const [row] = await this.#db.query<{ deleted: string }>(
+      `WITH expired AS (
+         DELETE FROM reserved_names WHERE reserved_until <= current_date
+       ), deleted AS (
+         DELETE FROM accounts WHERE id = $1::uuid AND name = $2 RETURNING name
+       ), reserved AS (
+         INSERT INTO reserved_names (name, reserved_until)
+         SELECT name, current_date + $3::int FROM deleted
+         ON CONFLICT (name) DO UPDATE SET reserved_until = EXCLUDED.reserved_until
+       )
+       SELECT count(*)::text AS deleted FROM deleted`,
+      [accountId, name, reservedDays],
+    )
+    return row?.deleted === '1'
   }
 }

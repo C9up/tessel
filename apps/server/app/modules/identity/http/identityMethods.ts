@@ -4,6 +4,7 @@ import type { HttpContext } from '@c9up/ream'
 import { rules, schema } from '@c9up/rune'
 import {
   type AccountCreated,
+  type AccountDeleted,
   type Challenge,
   type ClaimedKeyPackages,
   type ClaimKeyPackagesParams,
@@ -27,6 +28,7 @@ import type { AccountDevices } from '../application/AccountDevices.js'
 import type { AccountProfiles } from '../application/AccountProfiles.js'
 import type { Authenticate } from '../application/Authenticate.js'
 import type { CreateAccount } from '../application/CreateAccount.js'
+import type { DeleteAccount } from '../application/DeleteAccount.js'
 import type { KeyPackageDirectory } from '../application/KeyPackageDirectory.js'
 import type { LinkDevice } from '../application/LinkDevice.js'
 import type { SignIn } from '../application/SignIn.js'
@@ -80,6 +82,9 @@ export const PROFILE_CHANGES = { requests: 20, duration: '1 hour' } as const
 
 /** Profile fetches by one device, per minute: a contact list's worth. */
 export const PROFILE_FETCHES = { requests: 120, duration: '1 minute' } as const
+
+/** Deletion attempts by one device, per hour: a wrong signature is worth a few tries, no more. */
+export const DELETIONS = { requests: 5, duration: '1 hour' } as const
 
 /** A sealed grant: a nonce, a certificate, a tag. Well under this. */
 const MAX_GRANT = 1024
@@ -150,6 +155,7 @@ function refused(error: unknown): never {
     if (error.code === 'unknownDevice') throw new RpcFailure('E_IDENTITY_UNKNOWN_DEVICE')
     if (error.code === 'invalidRevocation') throw new RpcFailure('E_IDENTITY_INVALID_REVOCATION')
     if (error.code === 'invalidProfile') throw new RpcFailure('E_IDENTITY_INVALID_PROFILE')
+    if (error.code === 'invalidDeletion') throw new RpcFailure('E_IDENTITY_INVALID_DELETION')
     throw new RpcFailure('E_IDENTITY_INVALID_CERTIFICATE')
   }
   if (error instanceof ThrottleException) throw new RpcFailure('E_TOO_MANY_REQUESTS', { retryIn: error.response.availableIn })
@@ -171,6 +177,7 @@ export interface IdentityDeps {
   link: () => Promise<LinkDevice>
   devices: () => Promise<AccountDevices>
   profiles: () => Promise<AccountProfiles>
+  deleteAccount: () => Promise<DeleteAccount>
 }
 
 /**
@@ -208,7 +215,8 @@ export function identityMethods(
   | 'devices'
   | 'revokeDevice'
   | 'setProfile'
-  | 'profile',
+  | 'profile'
+  | 'deleteAccount',
   Handler
 > {
   const guard = sessionGuard(deps)
@@ -380,6 +388,19 @@ export function identityMethods(
         if (typeof account !== 'string' || account.length > 320) throw new RpcFailure('E_INVALID_PARAMS')
         const blob = await (await deps.profiles()).get(account)
         return (blob === null ? {} : { blob: toBase64Url(blob) }) satisfies SealedProfile
+      } catch (error) {
+        refused(error)
+      }
+    },
+
+    deleteAccount: async (ctx, params) => {
+      const device = await guard(ctx)
+      try {
+        await limiter.use(DELETIONS).consume(`identity_delete_${deviceKey(device)}`)
+        const deletion = isRecord(params) ? decoded(params.deletion, 64) : undefined
+        if (deletion?.length !== 64) throw new RpcFailure('E_INVALID_PARAMS')
+        await (await deps.deleteAccount()).run(device, deletion)
+        return { deleted: true } satisfies AccountDeleted
       } catch (error) {
         refused(error)
       }

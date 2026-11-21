@@ -6,6 +6,7 @@ import {
   fromBase64Url,
   ProtocolError,
   parseAccountCreated,
+  parseAccountDeleted,
   parseChallenge,
   parseClaimedKeyPackages,
   parseDeviceLinked,
@@ -127,4 +128,9 @@ test('profile answers are checked', () => {
   assert.deepEqual(parseSealedProfile({}), {})
   assert.deepEqual(parseSealedProfile({ blob: 'AQID' }), { blob: 'AQID' })
   assert.throws(() => parseSealedProfile({ blob: 'not base64!' }), ProtocolError)
+})
+
+test('an account deletion answer is checked', () => {
+  assert.deepEqual(parseAccountDeleted({ deleted: true }), { deleted: true })
+  assert.throws(() => parseAccountDeleted({ deleted: 'yes' }), ProtocolError)
 })

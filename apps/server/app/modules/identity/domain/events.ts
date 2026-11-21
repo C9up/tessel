@@ -78,3 +78,18 @@ export class ProfileUpdated extends DomainEvent {
     this.accountId = accountId
   }
 }
+
+/**
+ * `identity.account.deleted`: an account and everything the server kept of it are gone
+ * (story 03-07). The modules that keep something of an account (backups, pending media:
+ * epics 05 and 07) listen to it and erase theirs. Its opaque identifier only.
+ */
+export class AccountDeleted extends DomainEvent {
+  readonly type = 'identity.account.deleted'
+  readonly accountId: string
+
+  constructor(accountId: string) {
+    super()
+    this.accountId = accountId
+  }
+}

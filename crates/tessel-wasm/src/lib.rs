@@ -81,6 +81,18 @@ pub fn verify_certificate(certificate_bytes: &[u8]) -> Result<JsValue, JsValue> 
     to_js(&DeviceInfo::of(&certificate(certificate_bytes)?)?)
 }
 
+/// Checks an account deletion (story 03-07): the signature, by `account_key` (the one the
+/// caller knows for the account), deleting `account`. Throws otherwise.
+#[wasm_bindgen(js_name = verifyAccountDeletion)]
+pub fn verify_account_deletion(
+    account: &str,
+    account_key: &[u8],
+    deletion: &[u8],
+) -> Result<(), JsValue> {
+    let account = AccountId::parse(account).js()?;
+    tessel_core::verify_account_deletion(&account, account_key, deletion).js()
+}
+
 /// Checks a device revocation (story 03-05): the signature, by `account_key` (the one
 /// the caller knows for the account), revoking `device_id` of `account`. Throws otherwise.
 #[wasm_bindgen(js_name = verifyRevocation)]
@@ -406,6 +418,13 @@ impl Core {
         let send_id = self.client.share_profile(&group(group_id), sent_at).js()?;
         // Its send identifier only: it has no history entry for the page to show.
         Ok(send_id.as_bytes().to_vec())
+    }
+
+    /// The account key's deletion of this account (story 03-07). Leave every group
+    /// first: once the account is gone, the device can no longer reach them.
+    #[wasm_bindgen(js_name = signAccountDeletion)]
+    pub fn sign_account_deletion(&self) -> Result<Vec<u8>, JsValue> {
+        self.client.sign_account_deletion().js()
     }
 
     /// The account key's revocation of another device of the account (story 03-05).

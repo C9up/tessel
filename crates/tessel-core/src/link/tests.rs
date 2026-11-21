@@ -250,3 +250,46 @@ fn only_the_device_holding_the_account_key_signs_a_revocation() {
         LinkError::NoAccountKey
     );
 }
+
+#[test]
+fn a_deleted_account_leaves_every_group_first() {
+    let mut alice = first_device();
+    let mut bob = Account::new("bob").device();
+    let shared = crate::test_support::group(&mut alice, &mut [&mut bob]);
+    let alice_cert = alice.client.device().certificate().clone();
+
+    let deletion = alice.client.sign_account_deletion().unwrap();
+    crate::identity::verify_account_deletion(
+        alice_cert.account(),
+        alice_cert.account_key(),
+        &deletion,
+    )
+    .unwrap();
+
+    // Alice leaves each group; Bob commits her departure.
+    for group in alice.client.groups() {
+        let proposal = alice.client.leave_group(&group).unwrap();
+        alice.persist();
+        bob.client.process(&proposal).unwrap();
+        let out = bob.client.commit_pending_proposals(&group).unwrap();
+        bob.client.commit_accepted(&group).unwrap();
+        bob.persist();
+        match alice.client.process(&out.commit).unwrap() {
+            Incoming::Commit { removed_self, .. } => assert!(removed_self),
+            other => panic!("expected a commit, got {other:?}"),
+        }
+    }
+    assert!(alice.client.groups().is_empty());
+    assert_eq!(bob.client.members(&shared).unwrap().len(), 1);
+
+    // A linked device cannot delete the account.
+    let request = LinkRequest::new().unwrap();
+    let mut phone = first_device();
+    let grant = phone.client.grant_link(&request.qr()).unwrap();
+    phone.persist();
+    let tablet = linked(request, &grant.sealed);
+    assert_eq!(
+        tablet.client.sign_account_deletion().unwrap_err(),
+        LinkError::NoAccountKey
+    );
+}

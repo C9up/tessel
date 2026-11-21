@@ -37,6 +37,7 @@ export type IdentityErrorCode =
   | 'unknownDevice'
   | 'invalidRevocation'
   | 'invalidProfile'
+  | 'invalidDeletion'
 
 export class IdentityError extends Error {
   readonly code: IdentityErrorCode

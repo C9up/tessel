@@ -26,7 +26,7 @@ pub use groups::{GroupError, GroupId, Incoming, Outgoing, Removal};
 pub use history::{Content, EDITABLE_MESSAGES, Effect, HistoryEntry, Ignored};
 pub use identity::{
     AccountId, AccountKey, CHALLENGE_LEN, Device, DeviceCertificate, DeviceId, DeviceKey,
-    IdentityError, verify_revocation,
+    IdentityError, verify_account_deletion, verify_revocation,
 };
 pub use key_packages::{
     KEY_PACKAGE_LIFETIME, KEY_PACKAGE_POOL, KEY_PACKAGE_RENEW_BEFORE, KeyPackageError,

@@ -12,6 +12,16 @@ export interface CertificateVerifier {
 export interface Accounts {
   /** Keeps the account and its first device; `null` when the name or the key is already taken. */
   create(account: NewAccount): Promise<{ id: string } | null>
+  /**
+   * Deletes the account and all that hangs from it, and reserves its name for
+   * `reservedDays`. Whether it was there.
+   */
+  delete(accountId: string, name: string, reservedDays: number): Promise<boolean>
+}
+
+/** Checks an account deletion: the core does, with the account key the server keeps. */
+export interface DeletionVerifier {
+  verify(account: string, accountKey: Uint8Array, deletion: Uint8Array): boolean
 }
 
 /** Checks a sign-in proof: the core does, with the key the certificate certifies. */

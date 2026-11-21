@@ -284,3 +284,31 @@ fn a_revocation_verifies_with_the_account_key_for_its_device_only() {
         bad
     );
 }
+
+#[test]
+fn an_account_deletion_verifies_with_its_account_key_for_its_account_only() {
+    let account_key = AccountKey::generate().unwrap();
+    let deletion = account_key.delete_account(&alice()).unwrap();
+    verify_account_deletion(&alice(), account_key.public_key(), &deletion).unwrap();
+
+    let bad = Err(IdentityError::BadSignature);
+    let bob = AccountId::parse("bob@tessel.example").unwrap();
+    assert_eq!(
+        verify_account_deletion(&bob, account_key.public_key(), &deletion),
+        bad
+    );
+    // The name freed later belongs to another key: the old deletion proves nothing.
+    let next = AccountKey::generate().unwrap();
+    assert_eq!(
+        verify_account_deletion(&alice(), next.public_key(), &deletion),
+        bad
+    );
+    // A revocation is no deletion.
+    let revocation = account_key
+        .revoke(&alice(), DeviceId::random().unwrap())
+        .unwrap();
+    assert_eq!(
+        verify_account_deletion(&alice(), account_key.public_key(), &revocation),
+        bad
+    );
+}

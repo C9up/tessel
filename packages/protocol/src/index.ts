@@ -29,6 +29,7 @@ export const Method = {
   revokeDevice: 'identity.revokeDevice',
   setProfile: 'identity.setProfile',
   profile: 'identity.profile',
+  deleteAccount: 'identity.deleteAccount',
 } as const
 
 /**
@@ -69,6 +70,8 @@ export const ServerError = {
   E_IDENTITY_INVALID_REVOCATION: -32602,
   /** Not a sealed profile: unknown version, or too large. */
   E_IDENTITY_INVALID_PROFILE: -32602,
+  /** Deleting the account takes the account key's signature, and this one does not verify. */
+  E_IDENTITY_INVALID_DELETION: -32602,
   /** Too many calls from this network: wait, then try again. */
   E_TOO_MANY_REQUESTS: -32029,
 } as const
@@ -352,6 +355,21 @@ export interface SealedProfile {
   readonly blob?: string
 }
 
+/** Parameters of `identity.deleteAccount`: `TesselCore.signAccountDeletion`, base64url. */
+export interface DeleteAccountParams {
+  readonly deletion: string
+}
+
+/** Response of `identity.deleteAccount`. */
+export interface AccountDeleted {
+  readonly deleted: true
+}
+
+export function parseAccountDeleted(data: unknown): AccountDeleted {
+  if (isRecord(data) && data.deleted === true) return { deleted: true }
+  throw new ProtocolError('E_PROTOCOL_BAD_RESULT', Method.deleteAccount)
+}
+
 export function parseProfileSet(data: unknown): ProfileSet {
   if (isRecord(data) && data.saved === true) return { saved: true }
   throw new ProtocolError('E_PROTOCOL_BAD_RESULT', Method.setProfile)
@@ -417,6 +435,8 @@ export interface TesselClient {
   setProfile(blob: Uint8Array, signal?: AbortSignal): Promise<ProfileSet>
   /** The sealed profile of `account`; `undefined` when it has none. */
   profile(account: string, signal?: AbortSignal): Promise<Uint8Array<ArrayBuffer> | undefined>
+  /** Deletes the account for good (`TesselCore.signAccountDeletion`), once its devices left their groups. */
+  deleteAccount(deletion: Uint8Array, signal?: AbortSignal): Promise<AccountDeleted>
 }
 
 export function createTesselClient(transport: RpcTransport, url = '/rpc'): TesselClient {
@@ -459,6 +479,8 @@ export function createTesselClient(transport: RpcTransport, url = '/rpc'): Tesse
       const { blob } = await rpc.call(Method.profile, { account } satisfies ProfileParams, { parse: parseSealedProfile, signal })
       return blob === undefined ? undefined : fromBase64Url(blob)
     },
+    deleteAccount: (deletion, signal) =>
+      rpc.call(Method.deleteAccount, { deletion: toBase64Url(deletion) } satisfies DeleteAccountParams, { parse: parseAccountDeleted, signal }),
     revokeDevice: (device, revocation, signal) => {
       const params: RevokeDeviceParams =
         revocation === undefined ? { device: toBase64Url(device) } : { device: toBase64Url(device), revocation: toBase64Url(revocation) }

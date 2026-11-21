@@ -124,6 +124,10 @@ for (const [transport, make] of Object.entries(transports)) {
     assert.deepEqual(await tablet.groups(), [group])
     assert.equal((await tablet.members(group)).length, 3)
 
+    // Deleting the account (story 03-07) takes the account key too.
+    assert.equal((await alice.core.signAccountDeletion()).length, 64)
+    await assert.rejects(tablet.signAccountDeletion(), { name: 'TesselError', code: 'link:no-account-key' })
+
     // Revoked (story 03-05): Alice signs it, then removes it from each of its groups.
     assert.equal((await alice.core.revokeDevice(device.deviceId)).length, 64)
     await assert.rejects(tablet.revokeDevice(alice.device.deviceId), { name: 'TesselError', code: 'link:no-account-key' })
