@@ -69,7 +69,7 @@ function breach(module: string, layer: Layer, to: ReturnType<typeof target>, spe
 const OWNER: Record<string, readonly string[]> = {
   shared: ['outbox'],
   identity: ['accounts', 'devices', 'sessions', 'key_packages', 'profiles', 'reserved_names'],
-  delivery: ['envelopes', 'deliveries'],
+  delivery: ['envelopes', 'deliveries', 'delivery_groups'],
 }
 const TABLE_OWNER = new Map(Object.entries(OWNER).flatMap(([module, tables]) => tables.map((t): [string, string] => [t, module])))
 const TABLE_RE = /\b(?:FROM|JOIN|INTO|UPDATE|TABLE)\s+([a-z_]+)\b/gi

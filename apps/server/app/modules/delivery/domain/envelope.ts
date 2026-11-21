@@ -36,11 +36,25 @@ export interface OutgoingEnvelope {
 export interface StoredEnvelope {
   /** The server's identifier: the order envelopes arrived in. */
   readonly id: string
+  /** Its place in its group (story 04-02); `null` for a *Welcome*. */
+  readonly seq: number | null
   readonly header: EnvelopeHeader
   readonly body: Uint8Array
 }
 
-export type DeliveryErrorCode = 'invalidEnvelope' | 'noRecipient'
+/** Where an envelope was put: its identifier, and its place in its group. */
+export interface Placed {
+  readonly id: string
+  /** `null` for a *Welcome*: it belongs to no group yet. */
+  readonly seq: number | null
+}
+
+/**
+ * A group's envelopes are ordered (story 04-02): one commit per epoch, and nothing made
+ * in an epoch the group has left. The first commit of an epoch wins; the others, and any
+ * message of an older epoch, are refused: the device catches up, then tries again.
+ */
+export type DeliveryErrorCode = 'invalidEnvelope' | 'noRecipient' | 'staleEpoch'
 
 export class DeliveryError extends Error {
   readonly code: DeliveryErrorCode

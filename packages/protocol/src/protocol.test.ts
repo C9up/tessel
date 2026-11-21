@@ -145,3 +145,10 @@ test('delivery answers are checked', () => {
   assert.deepEqual(parseEnvelopes({ envelopes: [] }), { envelopes: [] })
   assert.throws(() => parseEnvelopes({ envelopes: [{ id: 'x', envelope: 'AQID' }] }), ProtocolError)
 })
+
+test('sequence numbers are checked', () => {
+  assert.deepEqual(parseEnvelopeSent({ envelope: '42', seq: 3 }), { envelope: '42', seq: 3 })
+  assert.throws(() => parseEnvelopeSent({ envelope: '42', seq: 0 }), ProtocolError)
+  assert.deepEqual(parseEnvelopes({ envelopes: [{ id: '7', seq: 2, envelope: 'AQID' }] }), { envelopes: [{ id: '7', seq: 2, envelope: 'AQID' }] })
+  assert.throws(() => parseEnvelopes({ envelopes: [{ id: '7', seq: 'two', envelope: 'AQID' }] }), ProtocolError)
+})

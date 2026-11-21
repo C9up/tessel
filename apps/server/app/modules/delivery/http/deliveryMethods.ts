@@ -46,6 +46,7 @@ function outgoing(params: unknown): OutgoingEnvelope | undefined {
 function refused(error: unknown): never {
   if (error instanceof DeliveryError) {
     if (error.code === 'noRecipient') throw new RpcFailure('E_DELIVERY_NO_RECIPIENT')
+    if (error.code === 'staleEpoch') throw new RpcFailure('E_DELIVERY_STALE_EPOCH')
     throw new RpcFailure('E_DELIVERY_INVALID_ENVELOPE')
   }
   if (error instanceof ThrottleException) throw new RpcFailure('E_TOO_MANY_REQUESTS', { retryIn: error.response.availableIn })
@@ -64,8 +65,8 @@ export function deliveryMethods(deps: {
         await limiter.use(SENDS).consume(`delivery_send_${hex(device.deviceId)}`)
         const envelope = outgoing(params)
         if (envelope === undefined) throw new RpcFailure('E_INVALID_PARAMS')
-        const id = await (await deps.mailbox()).send(device.deviceId, envelope)
-        return { envelope: id } satisfies EnvelopeSent
+        const placed = await (await deps.mailbox()).send(device.deviceId, envelope)
+        return (placed.seq === null ? { envelope: placed.id } : { envelope: placed.id, seq: placed.seq }) satisfies EnvelopeSent
       } catch (error) {
         refused(error)
       }
@@ -78,7 +79,13 @@ export function deliveryMethods(deps: {
         const after = isRecord(params) ? params.after : undefined
         if (after !== undefined && (typeof after !== 'string' || !/^\d{1,19}$/.test(after))) throw new RpcFailure('E_INVALID_PARAMS')
         const envelopes = await (await deps.mailbox()).fetch(device.deviceId, after ?? null)
-        return { envelopes: envelopes.map((envelope) => ({ id: envelope.id, envelope: toBase64Url(envelope.body) })) } satisfies Envelopes
+        return {
+          envelopes: envelopes.map((envelope) =>
+            envelope.seq === null
+              ? { id: envelope.id, envelope: toBase64Url(envelope.body) }
+              : { id: envelope.id, seq: envelope.seq, envelope: toBase64Url(envelope.body) },
+          ),
+        } satisfies Envelopes
       } catch (error) {
         refused(error)
       }

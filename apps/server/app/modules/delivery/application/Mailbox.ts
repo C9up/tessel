@@ -1,4 +1,4 @@
-import { DeliveryError, MAX_ENVELOPE, MAX_RECIPIENTS, type OutgoingEnvelope, type StoredEnvelope } from '../domain/envelope.js'
+import { DeliveryError, MAX_ENVELOPE, MAX_RECIPIENTS, type OutgoingEnvelope, type Placed, type StoredEnvelope } from '../domain/envelope.js'
 import type { EnvelopeReader, Mailboxes } from '../domain/ports.js'
 
 const hex = (bytes: Uint8Array) => Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('')
@@ -20,7 +20,7 @@ export class Mailbox {
   }
 
   /** Keeps `envelope` from `sender` for its recipients; its identifier. */
-  async send(sender: Uint8Array, envelope: OutgoingEnvelope): Promise<string> {
+  async send(sender: Uint8Array, envelope: OutgoingEnvelope): Promise<Placed> {
     if (envelope.body.length === 0 || envelope.body.length > MAX_ENVELOPE) throw new DeliveryError('invalidEnvelope')
     const header = this.#reader.read(envelope.body)
     if (header === null) throw new DeliveryError('invalidEnvelope')
@@ -31,7 +31,9 @@ export class Mailbox {
       .map(([, device]) => device)
     if (recipients.length === 0) throw new DeliveryError('noRecipient')
     if (recipients.length > MAX_RECIPIENTS) throw new DeliveryError('invalidEnvelope')
-    return this.#mailboxes.store(sender, envelope.sendId, header, envelope.body, recipients)
+    const placed = await this.#mailboxes.store(sender, envelope.sendId, header, envelope.body, recipients)
+    if (placed === null) throw new DeliveryError('staleEpoch')
+    return placed
   }
 
   /** The envelopes for `device` after `after`, oldest first. */

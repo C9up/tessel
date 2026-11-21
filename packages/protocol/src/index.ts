@@ -78,6 +78,13 @@ export const ServerError = {
   E_DELIVERY_INVALID_ENVELOPE: -32602,
   /** An envelope for nobody, the sender left aside. */
   E_DELIVERY_NO_RECIPIENT: -32602,
+  /**
+   * The group has left the envelope's epoch: another commit won it, or the device is
+   * behind. A commit: `TesselCore.commitRejected`, fetch and process what came, then
+   * `TesselCore.retryCommit`. A message: fetch and process, then send it again (the core
+   * encrypts it anew).
+   */
+  E_DELIVERY_STALE_EPOCH: -32014,
   /** Too many calls from this network: wait, then try again. */
   E_TOO_MANY_REQUESTS: -32029,
 } as const
@@ -385,6 +392,8 @@ export interface SendParams {
 export interface EnvelopeSent {
   /** The server's identifier of the envelope. */
   readonly envelope: string
+  /** Its place in its group; absent for a *Welcome*. For a commit, it means accepted: `TesselCore.commitAccepted`. */
+  readonly seq?: number
 }
 
 /** Parameters of `delivery.fetch`. */
@@ -397,6 +406,8 @@ export interface FetchParams {
 export interface ReceivedEnvelope {
   /** The server's identifier: envelopes come in its order. */
   readonly id: string
+  /** Its place in its group, without gaps; absent for a *Welcome*. */
+  readonly seq?: number
   /** base64url of the MLS message, for `TesselCore.process` or `TesselCore.joinGroup`. */
   readonly envelope: string
 }
@@ -407,16 +418,22 @@ export interface Envelopes {
 }
 
 export function parseEnvelopeSent(data: unknown): EnvelopeSent {
-  if (isRecord(data) && typeof data.envelope === 'string' && /^\d+$/.test(data.envelope)) return { envelope: data.envelope }
+  if (isRecord(data) && typeof data.envelope === 'string' && /^\d+$/.test(data.envelope)) {
+    if (data.seq === undefined) return { envelope: data.envelope }
+    if (isSeq(data.seq)) return { envelope: data.envelope, seq: data.seq }
+  }
   throw new ProtocolError('E_PROTOCOL_BAD_RESULT', Method.send)
 }
+
+const isSeq = (value: unknown): value is number => typeof value === 'number' && Number.isSafeInteger(value) && value > 0
 
 export function parseEnvelopes(data: unknown): Envelopes {
   if (isRecord(data) && Array.isArray(data.envelopes)) {
     const envelopes: ReceivedEnvelope[] = []
     for (const entry of data.envelopes) {
       if (!isRecord(entry) || typeof entry.id !== 'string' || !/^\d+$/.test(entry.id) || typeof entry.envelope !== 'string') break
-      envelopes.push({ id: entry.id, envelope: entry.envelope })
+      if (entry.seq !== undefined && !isSeq(entry.seq)) break
+      envelopes.push(isSeq(entry.seq) ? { id: entry.id, seq: entry.seq, envelope: entry.envelope } : { id: entry.id, envelope: entry.envelope })
     }
     if (envelopes.length === data.envelopes.length) return { envelopes }
   }
