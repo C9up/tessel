@@ -123,7 +123,15 @@ fn the_database_holds_nothing_in_clear() {
             }
         }
         assert!(!bytes.is_empty());
-        for clear in [&b"old station"[..], b"alice", b"bob", b"tessel.example"] {
+        // Needles long enough not to turn up by chance: some 300 KB of ciphertext hold
+        // any given 3 bytes (`bob`) about once in sixty runs.
+        let needles = [
+            &b"old station"[..],
+            b"alice@tessel.example",
+            b"bob@tessel.example",
+            b"tessel.example",
+        ];
+        for clear in needles {
             assert!(
                 !bytes.windows(clear.len()).any(|w| w == clear),
                 "{:?} in clear",
