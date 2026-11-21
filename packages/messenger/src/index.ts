@@ -11,10 +11,40 @@ import { fromBase64Url, type ReceivedEnvelope, ServerError, type TesselClient } 
 type MaybePromise<T> = T | Promise<T>
 type Bytes = Uint8Array
 
-/** A device, as the core describes one. */
+/** A device, as the core describes one: its certificate names its account and its account key. */
 export interface CoreDevice {
   readonly account: string
   readonly deviceId: Bytes
+  readonly certificate: Bytes
+}
+
+/** The safety number between this account and a contact's (story 02-09): the same on both screens. */
+export interface SafetyNumber {
+  /** 60 digits: {@link safetyGroups} cuts them for the screen. */
+  readonly digits: string
+  /** What this device shows as a QR, for the contact to scan. */
+  readonly qr: Bytes
+}
+
+/**
+ * What this device's verification says about a contact (story 05-03): never verified,
+ * verified, verified but with a device added since, or verified under another account
+ * key than the one it shows now (the safety number changed: verify again).
+ */
+export type Trust = 'unverified' | 'verified' | 'new-device' | 'key-changed'
+
+/**
+ * What the user must be told about a verified contact, as it happens: its safety number
+ * changed, it has new devices, or some of its verified devices left the group.
+ */
+export type Alert =
+  | { readonly type: 'key-changed'; readonly group: Bytes; readonly account: string }
+  | { readonly type: 'new-device'; readonly group: Bytes; readonly account: string; readonly devices: readonly Bytes[] }
+  | { readonly type: 'device-removed'; readonly group: Bytes; readonly account: string; readonly devices: readonly Bytes[] }
+
+/** A safety number in twelve groups of five digits, as the screen shows it. */
+export function safetyGroups(digits: string): string[] {
+  return digits.match(/\d{1,5}/g) ?? []
 }
 
 /** A commit the core prepared, and the Welcome for the devices it adds. */
@@ -62,6 +92,12 @@ export interface MessengerCore {
   outboundSent(group: Bytes, sendId: Bytes): MaybePromise<void>
   conversations(): MaybePromise<readonly { readonly group: Bytes; readonly name: string; readonly lastSentAt?: number; readonly unread: number }[]>
   markRead(group: Bytes): MaybePromise<void>
+  safetyNumber(contact: Bytes): MaybePromise<SafetyNumber>
+  checkScanned(contact: Bytes, scanned: Bytes): MaybePromise<void>
+  markVerified(contact: Bytes): MaybePromise<void>
+  unverify(account: string): MaybePromise<void>
+  trust(device: Bytes): MaybePromise<Trust>
+  acknowledgeDevice(device: Bytes): MaybePromise<void>
 }
 
 /** What the messenger asks of the server: `TesselClient`, signed in. */
@@ -69,9 +105,9 @@ export type MessengerServer = Pick<TesselClient, 'claimKeyPackages' | 'send' | '
 
 /** What can stop a conversation from starting. */
 export class MessengerError extends Error {
-  readonly code: 'E_MESSENGER_NO_DEVICE' | 'E_MESSENGER_WRONG_KEY_PACKAGE'
+  readonly code: 'E_MESSENGER_NO_DEVICE' | 'E_MESSENGER_WRONG_KEY_PACKAGE' | 'E_MESSENGER_NOT_A_MEMBER'
 
-  constructor(code: 'E_MESSENGER_NO_DEVICE' | 'E_MESSENGER_WRONG_KEY_PACKAGE') {
+  constructor(code: MessengerError['code']) {
     super(code)
     this.name = 'MessengerError'
     this.code = code
@@ -96,11 +132,39 @@ function proposalGroup(incoming: unknown): Bytes | undefined {
   return 'group' in incoming && incoming.group instanceof Uint8Array ? incoming.group : undefined
 }
 
-/** A commit the core applied: its group, and whether it removed this device. */
-function commitOf(incoming: unknown): { group: Bytes; removedSelf: boolean } | undefined {
+/** The devices a list of what the core read holds (`added`, `verifiedRemoved`); nothing when it is not one. */
+function devicesIn(listed: unknown): CoreDevice[] {
+  if (!Array.isArray(listed)) return []
+  return listed.filter(
+    (device): device is CoreDevice =>
+      typeof device === 'object' &&
+      device !== null &&
+      typeof device.account === 'string' &&
+      device.deviceId instanceof Uint8Array &&
+      device.certificate instanceof Uint8Array,
+  )
+}
+
+/** A commit the core applied: its group, whether it removed this device, the devices it added and the verified ones it removed. */
+function commitOf(incoming: unknown): { group: Bytes; removedSelf: boolean; added: CoreDevice[]; verifiedRemoved: CoreDevice[] } | undefined {
   if (typeof incoming !== 'object' || incoming === null || !('type' in incoming) || incoming.type !== 'commit') return undefined
   if (!('group' in incoming) || !(incoming.group instanceof Uint8Array)) return undefined
-  return { group: incoming.group, removedSelf: 'removedSelf' in incoming && incoming.removedSelf === true }
+  return {
+    group: incoming.group,
+    removedSelf: 'removedSelf' in incoming && incoming.removedSelf === true,
+    added: devicesIn('added' in incoming ? incoming.added : undefined),
+    verifiedRemoved: devicesIn('verifiedRemoved' in incoming ? incoming.verifiedRemoved : undefined),
+  }
+}
+
+/** How much a device's trust weighs on its account's: the worst one says what to show. */
+const TRUST_WEIGHT: Record<Trust, number> = { verified: 0, unverified: 1, 'new-device': 2, 'key-changed': 3 }
+
+/** The devices grouped by account, in order of first appearance. */
+function byAccount<T extends { readonly account: string }>(devices: readonly T[]): Map<string, T[]> {
+  const grouped = new Map<string, T[]>()
+  for (const device of devices) grouped.set(device.account, [...(grouped.get(device.account) ?? []), device])
+  return grouped
 }
 
 const sameBytes = (a: Bytes, b: Bytes) => a.length === b.length && a.every((value, i) => value === b[i])
@@ -116,6 +180,7 @@ export class Messenger {
   readonly #clock: () => number
   /** The groups this device proposed to leave, until a commit removes it. */
   readonly #leaving = new Set<string>()
+  readonly #listeners = new Set<(alert: Alert) => void>()
 
   /**
    * `catchUp` drains the device's inbox (`Inbox.drain` of `@tessel/protocol/realtime`,
@@ -191,8 +256,8 @@ export class Messenger {
   }
 
   /** The KeyPackages the directory hands out for `accounts`, each checked by the core and of the account asked for. */
-  async #claim(accounts: string[], required = true): Promise<{ keyPackage: Bytes; device: Bytes }[]> {
-    const claimed: { keyPackage: Bytes; device: Bytes }[] = []
+  async #claim(accounts: string[], required = true): Promise<{ keyPackage: Bytes; device: CoreDevice }[]> {
+    const claimed: { keyPackage: Bytes; device: CoreDevice }[] = []
     for (const owner of accounts) {
       const { keyPackages } = await this.#server.claimKeyPackages(owner)
       for (const entry of keyPackages) {
@@ -200,15 +265,18 @@ export class Messenger {
         if (keyPackage === undefined) throw new MessengerError('E_MESSENGER_WRONG_KEY_PACKAGE')
         const { device } = await this.#core.verifyKeyPackage(keyPackage)
         if (device.account !== owner) throw new MessengerError('E_MESSENGER_WRONG_KEY_PACKAGE')
-        claimed.push({ keyPackage, device: device.deviceId })
+        claimed.push({ keyPackage, device })
       }
       if (required && keyPackages.length === 0) throw new MessengerError('E_MESSENGER_NO_DEVICE')
     }
     return claimed
   }
 
-  /** Adds devices by batches of {@link INVITE_BATCH}; each batch's Welcome goes to its devices. */
-  async #add(group: Bytes, devices: { keyPackage: Bytes; device: Bytes }[]): Promise<void> {
+  /**
+   * Adds devices by batches of {@link INVITE_BATCH}; each batch's Welcome goes to its
+   * devices. What they change to verified contacts is told, as for a commit received.
+   */
+  async #add(group: Bytes, devices: { keyPackage: Bytes; device: CoreDevice }[]): Promise<void> {
     for (let start = 0; start < devices.length; start += INVITE_BATCH) {
       const batch = devices.slice(start, start + INVITE_BATCH)
       const welcome = await this.#commit(group, () =>
@@ -217,12 +285,16 @@ export class Messenger {
           batch.map((each) => each.keyPackage),
         ),
       )
-      if (welcome !== undefined)
-        await this.#server.send(
-          sendId(),
-          welcome,
-          batch.map((each) => each.device),
-        )
+      if (welcome === undefined) continue
+      await this.#server.send(
+        sendId(),
+        welcome,
+        batch.map((each) => each.device.deviceId),
+      )
+      await this.#alertAdded(
+        group,
+        batch.map((each) => each.device),
+      )
     }
   }
 
@@ -293,7 +365,8 @@ export class Messenger {
     const body = fromBase64Url(envelope.envelope)
     if (body === undefined) return
     if (envelope.seq === undefined) {
-      await this.#core.joinGroup(body)
+      const group = await this.#core.joinGroup(body)
+      await this.#alertAdded(group, await this.#core.members(group))
       return
     }
     const incoming = await this.#core.process(body)
@@ -301,6 +374,10 @@ export class Messenger {
     if (proposed !== undefined) await this.#commit(proposed, () => this.#core.commitPendingProposals(proposed), false)
     const committed = commitOf(incoming)
     if (committed === undefined) return
+    await this.#alertAdded(committed.group, committed.added)
+    for (const [account, devices] of byAccount(committed.verifiedRemoved)) {
+      this.#alert({ type: 'device-removed', group: committed.group, account, devices: devices.map((device) => device.deviceId) })
+    }
     const key = committed.group.join()
     if (committed.removedSelf) this.#leaving.delete(key)
     else if (this.#leaving.has(key)) await this.#propose(committed.group)
@@ -320,5 +397,112 @@ export class Messenger {
   /** The user read the conversation. */
   markRead(group: Bytes): MaybePromise<void> {
     return this.#core.markRead(group)
+  }
+
+  /**
+   * Listens to what must be told about verified contacts (story 05-03), as envelopes
+   * arrive and invitations go out. A listener runs on its own: what it throws does not
+   * stop the messenger. The function that stops listening.
+   */
+  onAlert(listener: (alert: Alert) => void): () => void {
+    this.#listeners.add(listener)
+    return () => void this.#listeners.delete(listener)
+  }
+
+  /** The devices of `account` in the group; refused when it has none there. */
+  async #devices(group: Bytes, account: string): Promise<[CoreDevice, ...CoreDevice[]]> {
+    const [first, ...rest] = (await this.#core.members(group)).filter((member) => member.account === account)
+    if (first === undefined) throw new MessengerError('E_MESSENGER_NOT_A_MEMBER')
+    return [first, ...rest]
+  }
+
+  /**
+   * The safety number with `account`, a member of the group, to compare on both screens
+   * or to show as a QR. It comes from the account key of the contact's first device in
+   * the group: if the server slipped in a device under another key, the codes differ, or
+   * that device stays unvouched once the others are verified.
+   */
+  async safetyNumber(group: Bytes, account: string): Promise<SafetyNumber> {
+    const [device] = await this.#devices(group, account)
+    return this.#core.safetyNumber(device.certificate)
+  }
+
+  /**
+   * The user compared the safety numbers and they are the same: `account` is verified,
+   * under the account key the number came from, with its devices of the moment.
+   */
+  async markVerified(group: Bytes, account: string): Promise<void> {
+    const [device] = await this.#devices(group, account)
+    await this.#core.markVerified(device.certificate)
+  }
+
+  /**
+   * Verifies `account` in one gesture: the QR its device shows was scanned. It must hold
+   * the account key of one of its devices in the group, and this account's; refused by
+   * the core otherwise (`safety:mismatch`, `safety:malformed`…), and nothing changes.
+   */
+  async verifyScanned(group: Bytes, account: string, scanned: Bytes): Promise<void> {
+    let refusal: unknown
+    for (const device of await this.#devices(group, account)) {
+      try {
+        await this.#core.checkScanned(device.certificate, scanned)
+      } catch (error) {
+        refusal = error
+        continue
+      }
+      await this.#core.markVerified(device.certificate)
+      return
+    }
+    throw refusal
+  }
+
+  /** `account` is no longer verified. */
+  unverify(account: string): MaybePromise<void> {
+    return this.#core.unverify(account)
+  }
+
+  /**
+   * What the conversation shows of each other account in it: verified, not, with a new
+   * device, or with a safety number that changed. The worst of its devices counts.
+   */
+  async verification(group: Bytes): Promise<{ account: string; trust: Trust }[]> {
+    const own = await this.#core.device()
+    const others = (await this.#core.members(group)).filter((member) => member.account !== own.account)
+    const accounts: { account: string; trust: Trust }[] = []
+    for (const [account, devices] of byAccount(others)) {
+      let trust: Trust = 'verified'
+      for (const device of devices) {
+        const each = await this.#core.trust(device.certificate)
+        if (TRUST_WEIGHT[each] > TRUST_WEIGHT[trust]) trust = each
+      }
+      accounts.push({ account, trust })
+    }
+    return accounts
+  }
+
+  /** The user saw the new devices of a verified `account` in the group: they are no longer reported. */
+  async acknowledgeDevices(group: Bytes, account: string): Promise<void> {
+    for (const device of await this.#devices(group, account)) {
+      if ((await this.#core.trust(device.certificate)) === 'new-device') await this.#core.acknowledgeDevice(device.certificate)
+    }
+  }
+
+  /** Tells what devices entering a group change to verified contacts: a key that changed, or new devices. */
+  async #alertAdded(group: Bytes, devices: readonly CoreDevice[]): Promise<void> {
+    for (const [account, own] of byAccount(devices)) {
+      const added: Bytes[] = []
+      let changed = false
+      for (const device of own) {
+        const trust = await this.#core.trust(device.certificate)
+        if (trust === 'key-changed') changed = true
+        else if (trust === 'new-device') added.push(device.deviceId)
+      }
+      if (changed) this.#alert({ type: 'key-changed', group, account })
+      else if (added.length > 0) this.#alert({ type: 'new-device', group, account, devices: added })
+    }
+  }
+
+  #alert(alert: Alert): void {
+    for (const listener of this.#listeners) queueMicrotask(() => listener(alert))
   }
 }

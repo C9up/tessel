@@ -1,14 +1,28 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { type EnvelopeSent, ServerError, toBase64Url } from '@tessel/protocol'
-import { type CoreDevice, INVITE_BATCH, Messenger, type MessengerCore, MessengerError, type MessengerServer } from './index.ts'
+import {
+  type Alert,
+  type CoreDevice,
+  INVITE_BATCH,
+  Messenger,
+  type MessengerCore,
+  MessengerError,
+  type MessengerServer,
+  safetyGroups,
+  type Trust,
+} from './index.ts'
 
 const bytes = (...values: number[]) => new Uint8Array(values)
+
+/** A device of `account`: its identifier and its certificate are `id`. */
+const member = (account: string, id: number): CoreDevice => ({ account, deviceId: bytes(id), certificate: bytes(id) })
 
 /**
  * A core that keeps a queue of one message, and says each KeyPackage is of `owner`. Its
  * groups have one other device (2), except a group it just created; `calls` records the
- * group operations.
+ * group operations. A device's trust is `trusts` of its certificate's first byte; a
+ * scanned QR matches the certificate that starts with its first byte.
  */
 function core(owner: (keyPackage: Uint8Array) => string) {
   const state = { queue: [] as Uint8Array[], sent: [] as Uint8Array[], encryptions: 0, alone: false, calls: [] as string[] }
@@ -16,14 +30,22 @@ function core(owner: (keyPackage: Uint8Array) => string) {
     state.calls.push(name)
     return { commit: bytes(7), welcome: name.startsWith('add') ? bytes(8) : undefined }
   }
-  const fake: MessengerCore & { queue: Uint8Array[]; sent: Uint8Array[]; calls: string[]; incoming: unknown; team: CoreDevice[] } = {
+  const fake: MessengerCore & {
+    queue: Uint8Array[]
+    sent: Uint8Array[]
+    calls: string[]
+    incoming: unknown
+    team: CoreDevice[]
+    trusts: Map<number, Trust>
+  } = {
     queue: state.queue,
     sent: state.sent,
     calls: state.calls,
     incoming: undefined,
     team: [],
-    device: () => ({ account: 'alice@tessel.example', deviceId: bytes(1) }),
-    verifyKeyPackage: (keyPackage) => ({ device: { account: owner(keyPackage), deviceId: keyPackage } }),
+    trusts: new Map(),
+    device: () => member('alice@tessel.example', 1),
+    verifyKeyPackage: (keyPackage) => ({ device: { account: owner(keyPackage), deviceId: keyPackage, certificate: keyPackage } }),
     createGroup: () => {
       state.alone = true
       return bytes(9)
@@ -62,6 +84,14 @@ function core(owner: (keyPackage: Uint8Array) => string) {
     },
     conversations: () => [],
     markRead: () => undefined,
+    safetyNumber: (contact) => ({ digits: String(contact[0]).padStart(60, '0'), qr: contact }),
+    checkScanned: (contact, scanned) => {
+      if (scanned[0] !== contact[0]) throw Object.assign(new Error('safety codes differ'), { code: 'safety:mismatch' })
+    },
+    markVerified: (contact) => void state.calls.push(`verified ${contact[0]}`),
+    unverify: (account) => void state.calls.push(`unverified ${account}`),
+    trust: (device) => fake.trusts.get(device[0] ?? 0) ?? 'unverified',
+    acknowledgeDevice: (device) => void state.calls.push(`acknowledged ${device[0]}`),
   }
   return fake
 }
@@ -188,11 +218,7 @@ test("a member's departure is committed by the first member to receive it", asyn
 
 test("leaving takes this account's other devices out, then proposes this one's departure", async () => {
   const fake = core(() => 'bob@tessel.example')
-  fake.team = [
-    { account: 'alice@tessel.example', deviceId: bytes(1) },
-    { account: 'alice@tessel.example', deviceId: bytes(11) },
-    { account: 'bob@tessel.example', deviceId: bytes(2) },
-  ]
+  fake.team = [member('alice@tessel.example', 1), member('alice@tessel.example', 11), member('bob@tessel.example', 2)]
   const { client, sends } = server({ claimed: {} })
   await quiet(fake, client).leave(bytes(9))
   assert.deepEqual(fake.calls, ['remove alice@tessel.example', 'accepted', 'leave'])
@@ -221,7 +247,7 @@ test('a departure committed too late is dropped without catching up from within 
 
 test('a leaving device proposes again until a commit removes it', async () => {
   const fake = core(() => 'bob@tessel.example')
-  fake.team = [{ account: 'alice@tessel.example', deviceId: bytes(1) }]
+  fake.team = [member('alice@tessel.example', 1)]
   const { client, sends } = server({ claimed: {} })
   const messenger = quiet(fake, client)
   await messenger.leave(bytes(9))
@@ -238,4 +264,95 @@ test('a leaving device proposes again until a commit removes it', async () => {
   await messenger.receive(envelope)
   assert.deepEqual(fake.calls, ['leave', 'leave'])
   assert.equal(sends.length, 2)
+})
+
+/** What the messenger told, once the listeners ran. */
+async function told(messenger: Messenger, act: () => Promise<void>): Promise<Alert[]> {
+  const alerts: Alert[] = []
+  const stop = messenger.onAlert((alert) => alerts.push(alert))
+  await act()
+  await new Promise((resolve) => setTimeout(resolve, 0))
+  stop()
+  return alerts
+}
+
+test('a safety number is cut in twelve groups of five digits', () => {
+  const groups = safetyGroups('0123456789'.repeat(6))
+  assert.equal(groups.length, 12)
+  assert.deepEqual(groups.slice(0, 2), ['01234', '56789'])
+})
+
+test("a contact's safety number and verification go through its device in the group", async () => {
+  const fake = core(() => 'bob@tessel.example')
+  fake.team = [member('alice@tessel.example', 1), member('bob@tessel.example', 20)]
+  const { client } = server({ claimed: {} })
+  const messenger = quiet(fake, client)
+  assert.equal((await messenger.safetyNumber(bytes(9), 'bob@tessel.example')).digits.slice(-2), '20')
+  assert.deepEqual(await messenger.verification(bytes(9)), [{ account: 'bob@tessel.example', trust: 'unverified' }])
+
+  // The codes were the same on both screens.
+  await messenger.markVerified(bytes(9), 'bob@tessel.example')
+  assert.deepEqual(fake.calls, ['verified 20'])
+  await assert.rejects(messenger.safetyNumber(bytes(9), 'carol@tessel.example'), new MessengerError('E_MESSENGER_NOT_A_MEMBER'))
+})
+
+test("scanning the contact's QR verifies it in one gesture, and a wrong QR changes nothing", async () => {
+  const fake = core(() => 'bob@tessel.example')
+  // Bob has a device under a key the server slipped in (21), and his own (22).
+  fake.team = [member('alice@tessel.example', 1), member('bob@tessel.example', 21), member('bob@tessel.example', 22)]
+  const { client } = server({ claimed: {} })
+  const messenger = quiet(fake, client)
+  await assert.rejects(messenger.verifyScanned(bytes(9), 'bob@tessel.example', bytes(99)), { code: 'safety:mismatch' })
+  assert.deepEqual(fake.calls, [])
+  await messenger.verifyScanned(bytes(9), 'bob@tessel.example', bytes(22))
+  assert.deepEqual(fake.calls, ['verified 22'])
+})
+
+test("a conversation shows the worst of each contact's devices", async () => {
+  const fake = core(() => 'bob@tessel.example')
+  fake.team = [member('alice@tessel.example', 1), member('bob@tessel.example', 20), member('bob@tessel.example', 21), member('carol@tessel.example', 40)]
+  fake.trusts.set(20, 'verified').set(21, 'new-device').set(40, 'verified')
+  const { client } = server({ claimed: {} })
+  const messenger = quiet(fake, client)
+  assert.deepEqual(await messenger.verification(bytes(9)), [
+    { account: 'bob@tessel.example', trust: 'new-device' },
+    { account: 'carol@tessel.example', trust: 'verified' },
+  ])
+
+  // Alice saw Bob's new device: only that one is acknowledged.
+  await messenger.acknowledgeDevices(bytes(9), 'bob@tessel.example')
+  assert.deepEqual(fake.calls, ['acknowledged 21'])
+})
+
+test('a commit received tells of a changed safety number, new devices and removed verified ones', async () => {
+  const fake = core(() => 'bob@tessel.example')
+  fake.trusts.set(20, 'key-changed').set(30, 'new-device').set(31, 'new-device').set(40, 'unverified')
+  const { client } = server({ claimed: {} })
+  const messenger = quiet(fake, client)
+  fake.incoming = {
+    type: 'commit',
+    group: bytes(9),
+    removedSelf: false,
+    added: [member('bob@tessel.example', 20), member('carol@tessel.example', 30), member('carol@tessel.example', 31), member('dave@tessel.example', 40)],
+    verifiedRemoved: [member('erin@tessel.example', 50)],
+  }
+  const alerts = await told(messenger, () => messenger.receive({ id: '1', seq: 4, envelope: toBase64Url(bytes(7)) }))
+  assert.deepEqual(alerts, [
+    { type: 'key-changed', group: bytes(9), account: 'bob@tessel.example' },
+    { type: 'new-device', group: bytes(9), account: 'carol@tessel.example', devices: [bytes(30), bytes(31)] },
+    { type: 'device-removed', group: bytes(9), account: 'erin@tessel.example', devices: [bytes(50)] },
+  ])
+})
+
+test('joining a group, or inviting, tells of what changed for verified contacts', async () => {
+  const fake = core(() => 'bob@tessel.example')
+  fake.trusts.set(20, 'key-changed')
+  const { client } = server({ claimed: { 'bob@tessel.example': [bytes(20)] } })
+  const messenger = quiet(fake, client)
+  const invited = await told(messenger, () => messenger.invite(bytes(9), ['bob@tessel.example']))
+  assert.deepEqual(invited, [{ type: 'key-changed', group: bytes(9), account: 'bob@tessel.example' }])
+
+  fake.team = [member('alice@tessel.example', 1), member('bob@tessel.example', 20)]
+  const joined = await told(messenger, () => messenger.receive({ id: '2', envelope: toBase64Url(bytes(9)) }))
+  assert.deepEqual(joined, [{ type: 'key-changed', group: bytes(9), account: 'bob@tessel.example' }])
 })

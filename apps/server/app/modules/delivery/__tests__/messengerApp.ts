@@ -1,7 +1,7 @@
 import { createNapiConnection } from '@c9up/atlas'
 import { DateTime } from '@c9up/chronos'
 import { checkKeyPackage, type ThrowawayDevice } from '@tessel/core-web/server'
-import { Messenger, type MessengerCore } from '@tessel/messenger'
+import { Messenger, type MessengerCore, type Trust } from '@tessel/messenger'
 import { createTesselClient, type TesselClient } from '@tessel/protocol'
 import { Inbox } from '@tessel/protocol/realtime'
 import databaseConfig from '#config/database.js'
@@ -39,6 +39,15 @@ export async function deleteAccounts(names: string[]): Promise<void> {
   const database = await createNapiConnection(databaseConfig.url ?? '', 1, 1)
   await database.execute('DELETE FROM accounts WHERE name IN (SELECT jsonb_array_elements_text($1::jsonb))', [JSON.stringify(names)])
 }
+
+/** Ends the reservation of a deleted account's name at once, as if its time had passed (story 03-07). */
+export async function endReservation(name: string): Promise<void> {
+  const database = await createNapiConnection(databaseConfig.url ?? '', 1, 1)
+  await database.execute('UPDATE reserved_names SET reserved_until = current_date WHERE name = $1', [name])
+}
+
+const TRUSTS: readonly string[] = ['unverified', 'verified', 'new-device', 'key-changed'] satisfies Trust[]
+const isTrust = (value: string): value is Trust => TRUSTS.includes(value)
 
 /** A message the core read: its text, if it is one. */
 function textOf(incoming: unknown): string | undefined {
@@ -91,6 +100,16 @@ function coreOf(device: ThrowawayDevice, seen: string[], processed: unknown[]): 
     outboundSent: (group, sendId) => core.outboundSent(group, sendId),
     conversations: () => core.conversations(),
     markRead: (group) => core.markRead(group),
+    safetyNumber: (contact) => core.safetyNumber(contact),
+    checkScanned: (contact, scanned) => core.checkScanned(contact, scanned),
+    markVerified: (contact) => core.markVerified(contact),
+    unverify: (account) => core.unverify(account),
+    trust: (device) => {
+      const trust = core.trust(device)
+      if (!isTrust(trust)) throw new Error(`unknown trust ${trust}`)
+      return trust
+    },
+    acknowledgeDevice: (device) => core.acknowledgeDevice(device),
   }
 }
 
