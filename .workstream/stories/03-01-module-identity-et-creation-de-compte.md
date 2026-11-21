@@ -4,7 +4,7 @@ title: "Module identity et création de compte"
 description: "Créer un compte avec un simple pseudo, sans e-mail ni numéro."
 tags: [product]
 status: draft
-state: todo
+state: review
 parent: epics/03-comptes-et-appareils.md
 depends_on: [stories/01-02-serveur-ream-sur-le-modele-nadeo.md, stories/02-02-identite-de-compte-et-d-appareil.md]
 priority: high
