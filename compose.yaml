@@ -1,7 +1,32 @@
-# Tessel's development infrastructure, apart from the database.
-# PostgreSQL is started by scripts/stack.sh (mutual TLS, as in production).
-# KeyDB: outbox guard, rate limiting, broadcast between instances.
+# Tessel's development infrastructure, started and stopped by scripts/stack.sh
+# (`pnpm infra`, `pnpm infra:down`): the script first draws the certificates and
+# passwords PostgreSQL starts with (.stack/pg), then brings up this project.
 services:
+  # PostgreSQL over mutual TLS only, as in production: no plaintext shortcut, not even
+  # in development. Its data lives in the container: every `pnpm infra` starts afresh.
+  postgres:
+    image: docker.io/library/postgres:17
+    container_name: tessel-postgres
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${STACK_PG_PORT:-5460}:5432"
+    environment:
+      # The superuser's password, drawn by scripts/stack.sh: nothing uses it.
+      POSTGRES_PASSWORD_FILE: /stack/superuser
+    volumes:
+      - ./.stack/pg:/stack:ro,Z
+    command:
+      - bash
+      - -c
+      - >-
+        cp /stack/server.crt /stack/server.key /stack/ca.crt /stack/hba.conf /tmp/
+        && chown postgres /tmp/server.key /tmp/hba.conf && chmod 600 /tmp/server.key
+        && cp /stack/init.sql /docker-entrypoint-initdb.d/
+        && exec docker-entrypoint.sh postgres -c ssl=on -c ssl_cert_file=/tmp/server.crt
+        -c ssl_key_file=/tmp/server.key -c ssl_ca_file=/tmp/ca.crt
+        -c hba_file=/tmp/hba.conf -c password_encryption=scram-sha-256
+
+  # KeyDB: outbox guard, rate limiting, sign-in challenges, broadcast between instances.
   keydb:
     image: docker.io/eqalpha/keydb:latest
     container_name: tessel-keydb

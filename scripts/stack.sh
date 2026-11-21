@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # =============================================================================
-# Development stack: PostgreSQL over mutual TLS, as in production.
+# Development stack: PostgreSQL over mutual TLS, as in production, and KeyDB, both
+# in one compose project (compose.yaml), so they start, stop and show up together.
 #
-#   scripts/stack.sh start   # certificates, PostgreSQL (podman), DB_* lines of .env
-#   scripts/stack.sh stop    # stops PostgreSQL and erases .stack/
+#   scripts/stack.sh start   # certificates, passwords, the compose project, DB_* lines of .env
+#   scripts/stack.sh stop    # stops the project and erases .stack/
 #
 # The application reaches PostgreSQL only over TLS with `sslmode=verify-full` and a
 # client certificate: no plaintext shortcut, not even in development. `start` writes
@@ -17,7 +18,7 @@
 # (scripts/migrate.sh); `app`, which the application runs as, owns nothing and
 # gets its rights from the migrations.
 #
-# Prerequisites: podman, python3, openssl. The CI runs the same script.
+# Prerequisites: podman, podman-compose, python3, openssl. The CI runs the same script.
 # =============================================================================
 set -euo pipefail
 
@@ -27,7 +28,13 @@ ENV_FILE="$ROOT/apps/server/.env"
 CONTAINER=tessel-postgres
 PG_PORT="${STACK_PG_PORT:-5460}"
 
+compose() {
+    podman-compose -f "$ROOT/compose.yaml" "$@"
+}
+
 stop() {
+    compose down >/dev/null 2>&1 || true
+    # A PostgreSQL started outside compose, by an earlier version of this script.
     podman rm -f "$CONTAINER" >/dev/null 2>&1 || true
     python3 -I -c 'import shutil, sys; shutil.rmtree(sys.argv[1], ignore_errors=True)' "$WORK"
 }
@@ -99,15 +106,11 @@ local     all all              trust
 hostssl   all all 0.0.0.0/0    scram-sha-256 clientcert=verify-ca
 hostnossl all all 0.0.0.0/0    reject
 HBA
-    podman run -d --name "$CONTAINER" -p "127.0.0.1:$PG_PORT:5432" \
-        -e POSTGRES_PASSWORD="$(openssl rand -hex 16)" \
-        -v "$WORK/pg:/stack:ro,Z" docker.io/library/postgres:17 \
-        bash -c 'cp /stack/server.crt /stack/server.key /stack/ca.crt /stack/hba.conf /tmp/ \
-            && chown postgres /tmp/server.key /tmp/hba.conf && chmod 600 /tmp/server.key \
-            && cp /stack/init.sql /docker-entrypoint-initdb.d/ \
-            && exec docker-entrypoint.sh postgres -c ssl=on -c ssl_cert_file=/tmp/server.crt \
-               -c ssl_key_file=/tmp/server.key -c ssl_ca_file=/tmp/ca.crt \
-               -c hba_file=/tmp/hba.conf -c password_encryption=scram-sha-256' >/dev/null
+    # The superuser's password: the entrypoint wants one; nothing uses it.
+    openssl rand -hex 16 > "$WORK/pg/superuser"
+    chmod 644 "$WORK/pg/superuser"
+    # Both containers, as one compose project: compose.yaml reads .stack/pg.
+    STACK_PG_PORT="$PG_PORT" compose up -d >/dev/null
     # The entrypoint runs init.sql on a temporary server, then starts the real one.
     local ready=0
     for _ in $(seq 1 120); do

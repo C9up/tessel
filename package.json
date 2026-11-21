@@ -14,8 +14,8 @@
     "typecheck": "turbo run typecheck",
     "check": "pnpm lint && pnpm typecheck && pnpm test && scripts/check-targets.sh && scripts/cargo.sh deny check && scripts/cargo.sh audit",
     "format": "biome check --write .",
-    "infra": "scripts/stack.sh start && podman-compose up -d",
-    "infra:down": "podman-compose down; scripts/stack.sh stop"
+    "infra": "scripts/stack.sh start",
+    "infra:down": "scripts/stack.sh stop"
   },
   "devDependencies": {
     "@biomejs/biome": "2.6.8",

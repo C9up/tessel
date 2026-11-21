@@ -87,8 +87,8 @@ jobs:
       - name: Build the web core
         run: pnpm --filter @tessel/core-web build
 
-      # The same stack as on a developer's machine: PostgreSQL over mutual TLS
-      # (scripts/stack.sh) and KeyDB (compose.yaml).
+      # The same stack as on a developer's machine: PostgreSQL over mutual TLS and
+      # KeyDB, one compose project started by scripts/stack.sh.
       - name: Start the stack
         run: |
           pipx install podman-compose

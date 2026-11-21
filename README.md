@@ -24,7 +24,7 @@ PostgreSQL is reachable only over mutual TLS (`sslmode=verify-full` and a client
 pnpm install
 cp apps/server/.env.example apps/server/.env
 pnpm --filter @tessel/server exec ream generate:key
-pnpm infra      # PostgreSQL (scripts/stack.sh) and KeyDB; writes the DB_* lines of .env
+pnpm infra      # PostgreSQL and KeyDB, one compose project (scripts/stack.sh); writes the DB_* lines of .env
 pnpm --filter @tessel/server migrate   # as tessel_owner (scripts/migrate.sh)
 pnpm dev        # server + web shell
 pnpm check      # lint, types, TS and Rust tests, dependency audit
