@@ -1,6 +1,6 @@
 import { component, html, signal } from '@c9up/aurora/core'
-import { mobileCore, type NativeTesselModule } from '@tessel/core-mobile'
 import { colorScheme } from '@c9up/orbit'
+import { mobileCore, type NativeTesselModule } from '@tessel/core-mobile'
 import { Appearance, type TurboModule, TurboModuleRegistry } from 'react-native'
 import { selfCheck } from './selfCheck.ts'
 
