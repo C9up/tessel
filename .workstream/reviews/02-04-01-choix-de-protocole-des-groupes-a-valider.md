@@ -4,7 +4,7 @@ title: "Choix de protocole des groupes, à valider"
 description: "Choix de protocole des groupes, à valider"
 tags: [review]
 status: draft
-state: todo
+state: done
 parent: stories/02-04-groupes-mls.md
 review: suggestion
 created: 2026-11-20

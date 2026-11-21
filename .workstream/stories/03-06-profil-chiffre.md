@@ -4,7 +4,7 @@ title: "Profil chiffré"
 description: "Nom affiché et avatar partagés avec ses contacts, sans que le serveur les voie."
 tags: [product]
 status: draft
-state: review
+state: doing
 parent: epics/03-comptes-et-appareils.md
 depends_on: [stories/03-01-module-identity-et-creation-de-compte.md, stories/02-08-chiffrement-des-medias.md]
 priority: medium

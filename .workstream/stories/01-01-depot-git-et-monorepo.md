@@ -4,7 +4,7 @@ title: "Dépôt git et monorepo"
 description: "Un dépôt git et un monorepo pnpm + turbo qui accueillent le serveur, le web, le mobile, le cœur Rust et le contrat partagé."
 tags: [product]
 status: draft
-state: review
+state: done
 parent: epics/01-fondations-du-depot.md
 priority: high
 created: 2026-11-20

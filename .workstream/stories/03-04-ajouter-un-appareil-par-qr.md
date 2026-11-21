@@ -4,7 +4,7 @@ title: "Ajouter un appareil par QR"
 description: "Le téléphone et le web se lient en scannant un QR, sans mot de passe."
 tags: [product]
 status: draft
-state: review
+state: doing
 parent: epics/03-comptes-et-appareils.md
 depends_on: [stories/03-03-annuaire-des-keypackages.md, stories/02-04-groupes-mls.md]
 priority: high

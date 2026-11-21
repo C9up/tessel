@@ -4,7 +4,7 @@ title: "Authentification par la clé d'appareil"
 description: "L'appareil prouve qui il est en signant un défi : pas de mot de passe à voler."
 tags: [product]
 status: draft
-state: review
+state: done
 parent: epics/03-comptes-et-appareils.md
 depends_on: [stories/03-01-module-identity-et-creation-de-compte.md]
 priority: high

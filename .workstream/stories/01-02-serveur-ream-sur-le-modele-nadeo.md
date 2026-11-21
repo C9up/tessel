@@ -4,7 +4,7 @@ title: "Serveur Ream sur le modèle nadeo"
 description: "Une app Ream vide mais déjà construite comme nadeo : modules hexagonaux, test d'architecture, outbox et bus d'événements."
 tags: [product]
 status: draft
-state: review
+state: doing
 parent: epics/01-fondations-du-depot.md
 depends_on: [stories/01-01-depot-git-et-monorepo.md]
 priority: high

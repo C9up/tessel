@@ -4,7 +4,7 @@ title: "Limitation de débit et tailles maximales"
 description: "Un compte ou un appareil ne peut pas noyer le serveur."
 tags: [product]
 status: draft
-state: review
+state: done
 parent: epics/04-acheminement-des-messages.md
 depends_on: [stories/04-03-livraison-en-temps-reel.md]
 priority: medium

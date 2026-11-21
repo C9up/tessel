@@ -4,7 +4,7 @@ title: "Squelette de tessel-core et chaîne de compilation"
 description: "Le crate Rust existe et une fonction triviale est appelée depuis le web (WASM) et depuis Expo (natif)."
 tags: [product]
 status: draft
-state: review
+state: done
 parent: epics/01-fondations-du-depot.md
 depends_on: [stories/01-01-depot-git-et-monorepo.md]
 priority: high

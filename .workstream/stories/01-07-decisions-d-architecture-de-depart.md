@@ -4,7 +4,7 @@ title: "Décisions d'architecture de départ"
 description: "Les choix structurants écrits avant de coder le métier, chacun avec ses options et ses sources."
 tags: [product]
 status: draft
-state: review
+state: done
 parent: epics/01-fondations-du-depot.md
 priority: high
 created: 2026-11-20

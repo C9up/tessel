@@ -4,7 +4,7 @@ title: "Groupes MLS"
 description: "Créer un groupe, ajouter et retirer des membres et des appareils, traiter les commits."
 tags: [product]
 status: draft
-state: review
+state: done
 parent: epics/02-tessel-core-le-coeur-cryptographique.md
 depends_on: [stories/02-03-keypackages.md]
 priority: high

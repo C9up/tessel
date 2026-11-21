@@ -4,7 +4,7 @@ title: "Choix de la base locale à valider, et critère Keystore renvoyé à la 
 description: "Choix de la base locale à valider, et critère Keystore renvoyé à la 02-13 (commi…"
 tags: [review]
 status: draft
-state: todo
+state: done
 parent: stories/02-06-base-locale-chiffree.md
 review: suggestion
 created: 2026-11-20

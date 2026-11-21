@@ -4,7 +4,7 @@ title: "Ordre des commits par groupe"
 description: "Un seul commit gagne par epoch, pour que tous les membres restent d'accord."
 tags: [product]
 status: draft
-state: review
+state: doing
 parent: epics/04-acheminement-des-messages.md
 depends_on: [stories/04-01-boites-aux-lettres-des-appareils.md]
 priority: high

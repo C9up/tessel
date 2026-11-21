@@ -4,7 +4,7 @@ title: "Accusés de remise et purge"
 description: "Une enveloppe disparaît du serveur dès que tous ses destinataires l'ont reçue."
 tags: [product]
 status: draft
-state: review
+state: doing
 parent: epics/04-acheminement-des-messages.md
 depends_on: [stories/04-03-livraison-en-temps-reel.md]
 priority: high

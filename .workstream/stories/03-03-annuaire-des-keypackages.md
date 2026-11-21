@@ -4,7 +4,7 @@ title: "Annuaire des KeyPackages"
 description: "Le serveur garde les KeyPackages de chaque appareil et en remet un, une seule fois, à qui veut l'inviter."
 tags: [product]
 status: draft
-state: review
+state: done
 parent: epics/03-comptes-et-appareils.md
 depends_on: [stories/03-02-authentification-par-la-cle-d-appareil.md, stories/02-03-keypackages.md]
 priority: high

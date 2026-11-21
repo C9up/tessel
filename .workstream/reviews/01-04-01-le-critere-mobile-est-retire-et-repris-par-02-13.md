@@ -4,7 +4,7 @@ title: "Le critère mobile est retiré, et repris par 02-13 et 13-10"
 description: "Le critère mobile est retiré, et repris par 02-13 et 13-10"
 tags: [review]
 status: draft
-state: todo
+state: done
 parent: stories/01-04-squelette-de-tessel-core-et-chaine-de-compilatio.md
 review: suggestion
 created: 2026-11-20

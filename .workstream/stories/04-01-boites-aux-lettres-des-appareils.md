@@ -4,7 +4,7 @@ title: "Boîtes aux lettres des appareils"
 description: "Chaque message est rangé une fois et livré à chaque appareil membre du groupe."
 tags: [product]
 status: draft
-state: review
+state: doing
 parent: epics/04-acheminement-des-messages.md
 depends_on: [stories/03-02-authentification-par-la-cle-d-appareil.md]
 priority: high

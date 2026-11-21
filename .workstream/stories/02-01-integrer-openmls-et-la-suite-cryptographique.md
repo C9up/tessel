@@ -4,7 +4,7 @@ title: "Intégrer OpenMLS et la suite cryptographique"
 description: "OpenMLS épinglé, la suite choisie, et le tout compile sur les trois cibles."
 tags: [product]
 status: draft
-state: review
+state: done
 parent: epics/02-tessel-core-le-coeur-cryptographique.md
 depends_on: [stories/01-04-squelette-de-tessel-core-et-chaine-de-compilatio.md, stories/01-07-decisions-d-architecture-de-depart.md]
 priority: high

@@ -4,7 +4,7 @@ title: "Le stockage chiffré des clés privées arrive avec la 02-06"
 description: "Le stockage chiffré des clés privées arrive avec la 02-06"
 tags: [review]
 status: draft
-state: review
+state: done
 parent: stories/02-02-identite-de-compte-et-d-appareil.md
 review: suggestion
 created: 2026-11-20

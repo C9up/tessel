@@ -4,7 +4,7 @@ title: "Base locale chiffrée"
 description: "L'état MLS et l'historique sont chiffrés sur l'appareil, sur le web comme sur Android."
 tags: [product]
 status: draft
-state: review
+state: done
 parent: epics/02-tessel-core-le-coeur-cryptographique.md
 depends_on: [stories/02-02-identite-de-compte-et-d-appareil.md]
 priority: high

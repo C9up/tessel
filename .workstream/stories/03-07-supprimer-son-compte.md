@@ -4,7 +4,7 @@ title: "Supprimer son compte"
 description: "Partir sans rien laisser derrière soi sur le serveur."
 tags: [product]
 status: draft
-state: review
+state: doing
 parent: epics/03-comptes-et-appareils.md
 depends_on: [stories/03-05-liste-et-revocation-des-appareils.md]
 priority: medium

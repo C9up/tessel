@@ -4,7 +4,7 @@ title: "Contrôles automatiques"
 description: "Une commande qui vérifie tout, branchée sur la CI de la forge où le dépôt sera publié."
 tags: [product]
 status: draft
-state: review
+state: done
 parent: epics/01-fondations-du-depot.md
 depends_on: [stories/01-02-serveur-ream-sur-le-modele-nadeo.md, stories/01-04-squelette-de-tessel-core-et-chaine-de-compilatio.md]
 priority: medium

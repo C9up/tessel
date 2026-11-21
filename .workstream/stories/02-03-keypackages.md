@@ -4,7 +4,7 @@ title: "KeyPackages"
 description: "Le cœur fabrique et renouvelle les KeyPackages que le serveur distribue pour qu'on puisse inviter un appareil."
 tags: [product]
 status: draft
-state: review
+state: done
 parent: epics/02-tessel-core-le-coeur-cryptographique.md
 depends_on: [stories/02-02-identite-de-compte-et-d-appareil.md]
 priority: high

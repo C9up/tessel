@@ -4,7 +4,7 @@ title: "Tests croisés et fuzzing"
 description: "La preuve que le web et Android se comprennent, et que des entrées hostiles ne cassent rien."
 tags: [product]
 status: draft
-state: review
+state: doing
 parent: epics/02-tessel-core-le-coeur-cryptographique.md
 depends_on: [stories/02-10-liaisons-wasm-pour-le-web.md, stories/02-13-liaison-mobile-du-coeur-sur-la-stack-ream.md]
 priority: medium

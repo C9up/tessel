@@ -4,7 +4,7 @@ title: "Livraison en temps réel"
 description: "Les enveloppes arrivent en direct par SSE et partent par POST."
 tags: [product]
 status: draft
-state: review
+state: done
 parent: epics/04-acheminement-des-messages.md
 depends_on: [stories/04-01-boites-aux-lettres-des-appareils.md, stories/01-05-contrat-client-serveur-avec-comet.md]
 priority: high
