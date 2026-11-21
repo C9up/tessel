@@ -123,6 +123,10 @@ export class CoreHost implements TesselCore {
     return this.#call((core) => core.holdsAccountKey())
   }
 
+  signIn(challenge: Bytes): Promise<Bytes> {
+    return this.#call((core) => own(core.signIn(challenge)))
+  }
+
   close(): Promise<void> {
     return this.#serial(() => {
       this.#pendingKey?.fill(0)

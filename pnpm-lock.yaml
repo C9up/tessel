@@ -196,6 +196,9 @@ importers:
       '@c9up/spectrum':
         specifier: ^0.1.19
         version: 0.1.19(@c9up/ream@0.2.30)
+      '@c9up/warden':
+        specifier: ^0.2.7
+        version: 0.2.7(@c9up/quasar@0.2.3)(@c9up/ream@0.2.30)
       '@tessel/core-web':
         specifier: workspace:*
         version: link:../../packages/core-web
@@ -446,6 +449,21 @@ packages:
     peerDependencies:
       '@c9up/ream': ^0.2.26
     peerDependenciesMeta:
+      '@c9up/ream':
+        optional: true
+
+  '@c9up/warden@0.2.7':
+    resolution: {integrity: sha512-bbbBUgBR/EY63zRGO+PZ2g9eAnvQiRefNz0K1fkx5nahwWILR7UP/4BuLqu5Qf+zx0hDeHX31A2aEyEiGc2WtQ==}
+    engines: {node: '>=24.0.0'}
+    peerDependencies:
+      '@c9up/inker': ^0.1.20
+      '@c9up/quasar': ^0.1.0 || ^0.2.0
+      '@c9up/ream': ^0.2.28
+    peerDependenciesMeta:
+      '@c9up/inker':
+        optional: true
+      '@c9up/quasar':
+        optional: true
       '@c9up/ream':
         optional: true
 
@@ -1031,6 +1049,11 @@ snapshots:
 
   '@c9up/spectrum@0.1.19(@c9up/ream@0.2.30)':
     optionalDependencies:
+      '@c9up/ream': 0.2.30(@c9up/comet@0.1.5)(@c9up/quasar@0.2.3)(supports-color@8.1.1)
+
+  '@c9up/warden@0.2.7(@c9up/quasar@0.2.3)(@c9up/ream@0.2.30)':
+    optionalDependencies:
+      '@c9up/quasar': 0.2.3(@c9up/ream@0.2.30)(supports-color@8.1.1)
       '@c9up/ream': 0.2.30(@c9up/comet@0.1.5)(@c9up/quasar@0.2.3)(supports-color@8.1.1)
 
   '@emnapi/core@1.11.2':

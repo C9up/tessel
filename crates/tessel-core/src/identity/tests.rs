@@ -189,3 +189,61 @@ fn a_key_that_is_not_ed25519_is_rejected() {
         IdentityError::InvalidKey
     );
 }
+
+#[test]
+fn a_sign_in_proof_verifies_once_for_its_challenge_and_device_only() {
+    let account_key = AccountKey::generate().unwrap();
+    let device = Device::create(&alice(), &account_key).unwrap();
+    let other = Device::create(&alice(), &account_key).unwrap();
+    let challenge = [7; CHALLENGE_LEN];
+    let proof = device.sign_in(&challenge).unwrap();
+
+    device
+        .certificate()
+        .verify_sign_in(&challenge, &proof)
+        .unwrap();
+    // Another challenge, another device of the same account: the proof says nothing.
+    assert_eq!(
+        device
+            .certificate()
+            .verify_sign_in(&[8; CHALLENGE_LEN], &proof),
+        Err(IdentityError::BadSignature)
+    );
+    assert_eq!(
+        other.certificate().verify_sign_in(&challenge, &proof),
+        Err(IdentityError::BadSignature)
+    );
+    let mut tampered = proof.clone();
+    tampered[0] ^= 1;
+    assert_eq!(
+        device.certificate().verify_sign_in(&challenge, &tampered),
+        Err(IdentityError::BadSignature)
+    );
+}
+
+#[test]
+fn a_sign_in_proof_is_not_an_mls_signature() {
+    let account_key = AccountKey::generate().unwrap();
+    let device = Device::create(&alice(), &account_key).unwrap();
+    let challenge = [7; CHALLENGE_LEN];
+    // The bare challenge, signed as the device signs MLS content, is no proof.
+    let raw = Signer::sign(&device, &challenge).unwrap();
+    assert_eq!(
+        device.certificate().verify_sign_in(&challenge, &raw),
+        Err(IdentityError::BadSignature)
+    );
+}
+
+#[test]
+fn a_challenge_of_the_wrong_size_is_refused() {
+    let account_key = AccountKey::generate().unwrap();
+    let device = Device::create(&alice(), &account_key).unwrap();
+    assert_eq!(
+        device.sign_in(&[0; 31]).unwrap_err(),
+        IdentityError::MalformedChallenge
+    );
+    assert_eq!(
+        device.certificate().verify_sign_in(&[0; 33], &[0; 64]),
+        Err(IdentityError::MalformedChallenge)
+    );
+}

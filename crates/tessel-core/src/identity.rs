@@ -41,6 +41,16 @@ const CERTIFICATE_LABEL: &[u8] = b"Tessel 1.0 DeviceCertificate";
 /// Certificate format version.
 const CERTIFICATE_VERSION: u8 = 1;
 
+/// Signature label of a sign-in proof (story 03-02). It differs from every MLS label
+/// (`MLS 1.0 ...`) and from the certificate's: a proof is never valid as anything else.
+const SIGN_IN_LABEL: &[u8] = b"Tessel 1.0 SignIn";
+
+/// Sign-in proof format version.
+const SIGN_IN_VERSION: u8 = 1;
+
+/// Size of a sign-in challenge: 256 random bits drawn by the server.
+pub const CHALLENGE_LEN: usize = 32;
+
 /// Size of an Ed25519 public key.
 const PUBLIC_KEY_LEN: usize = 32;
 
@@ -73,6 +83,9 @@ pub enum IdentityError {
     /// The MLS *credential* is not a *BasicCredential*.
     #[error("not a basic credential")]
     NotBasicCredential,
+    /// A sign-in challenge is not [`CHALLENGE_LEN`] bytes.
+    #[error("malformed sign-in challenge")]
+    MalformedChallenge,
 }
 
 /// An account: `name@domain` (ADR-002).
@@ -332,6 +345,22 @@ struct SignContent<'a> {
     content: VLByteSlice<'a>,
 }
 
+/// What a device signs to sign in (story 03-02): the server's challenge, bound to the
+/// account and the device, so a proof made for one device proves nothing for another.
+#[derive(TlsSerialize, TlsSize)]
+struct SignInContent {
+    version: u8,
+    challenge: [u8; CHALLENGE_LEN],
+    account: TlsByteVecU16,
+    device_id: [u8; 16],
+}
+
+fn challenge(bytes: &[u8]) -> Result<[u8; CHALLENGE_LEN], IdentityError> {
+    bytes
+        .try_into()
+        .map_err(|_| IdentityError::MalformedChallenge)
+}
+
 /// A device certificate: the account key attests that the signing key `device_key`
 /// is the one of device `device_id` of account `account`.
 #[derive(Clone, PartialEq, Eq)]
@@ -395,6 +424,42 @@ impl DeviceCertificate {
                 &self.to_be_signed()?,
                 &self.account_key,
                 &self.signature,
+            )
+            .map_err(|_| IdentityError::BadSignature)
+    }
+
+    /// What the device of this certificate signs to answer `challenge`.
+    fn sign_in_to_be_signed(
+        &self,
+        challenge: [u8; CHALLENGE_LEN],
+    ) -> Result<Vec<u8>, IdentityError> {
+        let content = SignInContent {
+            version: SIGN_IN_VERSION,
+            challenge,
+            account: self.account.to_string().into_bytes().into(),
+            device_id: self.device_id.0,
+        }
+        .tls_serialize_detached()
+        .map_err(|_| IdentityError::MalformedChallenge)?;
+        SignContent {
+            label: VLByteSlice(SIGN_IN_LABEL),
+            content: VLByteSlice(&content),
+        }
+        .tls_serialize_detached()
+        .map_err(|_| IdentityError::MalformedChallenge)
+    }
+
+    /// What the server does when a device signs in (story 03-02): checks that `proof`
+    /// is the signature, by the key this certificate certifies, of `challenge` for this
+    /// account and device. The caller checks the certificate itself, and that it drew
+    /// the challenge and accepts it only once.
+    pub fn verify_sign_in(&self, challenge: &[u8], proof: &[u8]) -> Result<(), IdentityError> {
+        RustCrypto::default()
+            .verify_signature(
+                SCHEME,
+                &self.sign_in_to_be_signed(self::challenge(challenge)?)?,
+                &self.device_key,
+                proof,
             )
             .map_err(|_| IdentityError::BadSignature)
     }
@@ -494,6 +559,15 @@ impl Device {
     /// The device's certificate.
     pub fn certificate(&self) -> &DeviceCertificate {
         &self.certificate
+    }
+
+    /// The proof that this device answers the server's `challenge` (story 03-02): no
+    /// password, the device key signs. See [`DeviceCertificate::verify_sign_in`].
+    pub fn sign_in(&self, challenge: &[u8]) -> Result<Vec<u8>, IdentityError> {
+        let to_be_signed = self
+            .certificate
+            .sign_in_to_be_signed(self::challenge(challenge)?)?;
+        self.key.0.sign(&to_be_signed)
     }
 
     /// The *credential* and public key the device presents in its MLS groups.

@@ -1,6 +1,18 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { createTesselClient, fromBase64Url, ProtocolError, parseAccountCreated, parsePong, toBase64Url } from './index.ts'
+import {
+  createTesselClient,
+  fetchTransport,
+  fromBase64Url,
+  ProtocolError,
+  parseAccountCreated,
+  parseChallenge,
+  parsePong,
+  parseSession,
+  parseSignedIn,
+  parseSignedOut,
+  toBase64Url,
+} from './index.ts'
 
 test('a pong is accepted, anything else is refused', () => {
   assert.deepEqual(parsePong({ pong: true, protocol: 1 }), { pong: true, protocol: 1 })
@@ -37,4 +49,34 @@ test('bytes travel as base64url both ways, and anything else is refused', () => 
 test('an account creation answer is checked', () => {
   assert.deepEqual(parseAccountCreated({ account: 'alice@tessel.example' }), { account: 'alice@tessel.example' })
   assert.throws(() => parseAccountCreated({ account: 42 }), ProtocolError)
+})
+
+test('sign-in answers are checked', () => {
+  const challenge = toBase64Url(new Uint8Array(32).fill(1))
+  assert.deepEqual(parseChallenge({ challenge }), { challenge })
+  assert.throws(() => parseChallenge({ challenge: toBase64Url(new Uint8Array(16)) }), ProtocolError)
+  assert.deepEqual(parseSignedIn({ token: 'tsn_abc.def' }), { token: 'tsn_abc.def' })
+  assert.throws(() => parseSignedIn({ token: '' }), ProtocolError)
+  assert.deepEqual(parseSession({ account: 'alice@tessel.example', device: 'AAAA' }), { account: 'alice@tessel.example', device: 'AAAA' })
+  assert.throws(() => parseSession({ account: 'alice@tessel.example' }), ProtocolError)
+  assert.deepEqual(parseSignedOut({ signedOut: true }), { signedOut: true })
+  assert.throws(() => parseSignedOut({}), ProtocolError)
+})
+
+test('the fetch transport sends the session token in a header, never in the body', async () => {
+  let token: string | undefined
+  const seen: Array<{ authorization: string | null; body: string }> = []
+  const transport = fetchTransport('https://tessel.example', {
+    token: () => token,
+    fetch: async (_url, init) => {
+      seen.push({ authorization: new Headers(init?.headers).get('authorization'), body: String(init?.body) })
+      return Response.json({ jsonrpc: '2.0', id: 1, result: { pong: true, protocol: 1 } })
+    },
+  })
+  await transport('/rpc', { jsonrpc: '2.0', id: 1, method: 'system.ping' }, {})
+  token = 'tsn_abc.def'
+  await transport('/rpc', { jsonrpc: '2.0', id: 1, method: 'system.ping' }, {})
+  assert.equal(seen[0]?.authorization, null)
+  assert.equal(seen[1]?.authorization, 'Bearer tsn_abc.def')
+  assert.ok(!seen[1]?.body.includes('tsn_'))
 })

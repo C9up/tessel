@@ -8,7 +8,7 @@
  */
 
 import { readFileSync } from 'node:fs'
-import { Core, generateStoreKey, initSync, selfCheck, verifyCertificate as verify } from '../generated/tessel_wasm.js'
+import { Core, generateStoreKey, initSync, selfCheck, verifyCertificate as verify, verifySignIn } from '../generated/tessel_wasm.js'
 
 /** A device, as its verified certificate names it. */
 export interface CertifiedDevice {
@@ -42,18 +42,50 @@ export function verifyCertificate(certificate: Uint8Array): CertifiedDevice | un
 }
 
 /**
- * For tests only: the certificate of a throwaway account's first device, as an app
- * would send it. Its keys are dropped at once.
+ * Whether `proof` is the signature of `challenge` by the device `certificate` certifies
+ * (story 03-02). The certificate is the one the server keeps for the device.
  */
-export function throwawayCertificate(account: string): Uint8Array<ArrayBuffer> {
+export function checkSignIn(certificate: Uint8Array, challenge: Uint8Array, proof: Uint8Array): boolean {
+  loadServerCore()
+  try {
+    verifySignIn(certificate, challenge, proof)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** For tests only: a throwaway account's first device, as an app holds it. */
+export interface ThrowawayDevice {
+  readonly certificate: Uint8Array<ArrayBuffer>
+  readonly deviceId: Uint8Array<ArrayBuffer>
+  /** The proof `TesselCore.signIn` makes. */
+  signIn(challenge: Uint8Array): Uint8Array
+  /** Drops its keys. */
+  free(): void
+}
+
+/** For tests only: a throwaway account's first device. Its keys live until `free`. */
+export function throwawayDevice(account: string): ThrowawayDevice {
   loadServerCore()
   const key = generateStoreKey()
   const core = Core.createAccount(account, key)
   key.fill(0)
-  try {
-    const device: CertifiedDevice = core.device()
-    return device.certificate
-  } finally {
-    core.free()
+  const device: CertifiedDevice = core.device()
+  return {
+    certificate: device.certificate,
+    deviceId: device.deviceId,
+    signIn: (challenge) => core.signIn(challenge),
+    free: () => core.free(),
   }
+}
+
+/**
+ * For tests only: the certificate of a throwaway account's first device, as an app
+ * would send it. Its keys are dropped at once.
+ */
+export function throwawayCertificate(account: string): Uint8Array<ArrayBuffer> {
+  const device = throwawayDevice(account)
+  device.free()
+  return device.certificate
 }

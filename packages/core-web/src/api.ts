@@ -168,6 +168,8 @@ export interface TesselCore {
   createAccount(account: string): Promise<DeviceInfo>
   device(): Promise<DeviceInfo>
   holdsAccountKey(): Promise<boolean>
+  /** Signs the server's sign-in challenge with the device key: the proof for `identity.signIn`. */
+  signIn(challenge: Bytes): Promise<Bytes>
   /** Releases the core and the database. */
   close(): Promise<void>
 
@@ -217,6 +219,7 @@ export const METHODS = [
   'createAccount',
   'device',
   'holdsAccountKey',
+  'signIn',
   'close',
   'refreshKeyPackages',
   'verifyKeyPackage',

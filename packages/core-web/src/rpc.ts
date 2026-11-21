@@ -132,6 +132,9 @@ export class RemoteCore implements TesselCore {
   holdsAccountKey() {
     return this.#call('holdsAccountKey', [])
   }
+  signIn(challenge: Bytes) {
+    return this.#call('signIn', [challenge])
+  }
   close() {
     return this.#call('close', [])
   }

@@ -83,6 +83,9 @@ for (const [transport, make] of Object.entries(transports)) {
     assert.equal(device.account, 'alice@tessel.example')
     assert.equal(device.deviceId.length, 16)
     assert.equal(await core.holdsAccountKey(), true)
+    // The sign-in proof (story 03-02): an Ed25519 signature, for a 32-byte challenge only.
+    assert.equal((await core.signIn(new Uint8Array(32).fill(7))).length, 64)
+    await assert.rejects(core.signIn(new Uint8Array(31)), { name: 'TesselError', code: 'identity:malformed-challenge' })
     await assert.rejects(core.createAccount('alice@tessel.example'), { name: 'TesselError', code: 'host:account-exists' })
     await core.close()
 

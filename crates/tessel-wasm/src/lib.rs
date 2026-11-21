@@ -80,6 +80,20 @@ pub fn verify_certificate(certificate_bytes: &[u8]) -> Result<JsValue, JsValue> 
     to_js(&DeviceInfo::of(&certificate(certificate_bytes)?)?)
 }
 
+/// Checks a sign-in proof (story 03-02): the signature, by the key `certificate_bytes`
+/// certifies, of `challenge` for that device. The server calls it with the certificate
+/// it keeps for the device, and the challenge it drew.
+#[wasm_bindgen(js_name = verifySignIn)]
+pub fn verify_sign_in(
+    certificate_bytes: &[u8],
+    challenge: &[u8],
+    proof: &[u8],
+) -> Result<(), JsValue> {
+    certificate(certificate_bytes)?
+        .verify_sign_in(challenge, proof)
+        .js()
+}
+
 fn to_js(value: &impl Serialize) -> Result<JsValue, JsValue> {
     value.serialize(&serde_wasm_bindgen::Serializer::new()).js()
 }
@@ -140,6 +154,12 @@ impl Core {
     /// This device.
     pub fn device(&self) -> Result<JsValue, JsValue> {
         to_js(&DeviceInfo::of(self.client.device().certificate())?)
+    }
+
+    /// Signs the server's sign-in challenge with the device key (story 03-02).
+    #[wasm_bindgen(js_name = signIn)]
+    pub fn sign_in(&self, challenge: &[u8]) -> Result<Vec<u8>, JsValue> {
+        self.client.device().sign_in(challenge).js()
     }
 
     /// Whether this device holds its account's key.

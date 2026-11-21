@@ -85,6 +85,7 @@ impl Code for IdentityError {
             Self::BadSignature => "bad-signature",
             Self::KeyMismatch => "key-mismatch",
             Self::NotBasicCredential => "not-basic-credential",
+            Self::MalformedChallenge => "malformed-challenge",
         };
         format!("identity:{case}")
     }

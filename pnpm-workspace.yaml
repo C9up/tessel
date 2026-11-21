@@ -9,3 +9,6 @@ packages:
 allowBuilds:
   "@swc/core": true
   esbuild: true
+
+minimumReleaseAgeExclude:
+  - '@c9up/warden@0.2.7'

@@ -24,7 +24,7 @@ export interface NewAccount {
   readonly device: CertifiedDevice
 }
 
-export type IdentityErrorCode = 'invalidCertificate' | 'wrongDomain' | 'nameTaken'
+export type IdentityErrorCode = 'invalidCertificate' | 'wrongDomain' | 'nameTaken' | 'signInRefused' | 'unauthenticated'
 
 export class IdentityError extends Error {
   readonly code: IdentityErrorCode
