@@ -17,6 +17,7 @@ mod media;
 mod messages;
 mod outbox;
 mod profile;
+mod receipts;
 mod safety;
 pub mod store;
 mod suite;
@@ -30,7 +31,7 @@ pub use groups::{
     GROUP_SETTINGS_EXTENSION, GroupChange, GroupError, GroupId, GroupSettings, Incoming,
     MAX_GROUP_DEVICES, MAX_GROUP_NAME, Outgoing, Removal,
 };
-pub use history::{Content, EDITABLE_MESSAGES, Effect, HistoryEntry, Ignored};
+pub use history::{Content, EDITABLE_MESSAGES, Effect, HistoryEntry, Ignored, Receipt, Status};
 pub use identity::{
     AccountId, AccountKey, CHALLENGE_LEN, Device, DeviceCertificate, DeviceId, DeviceKey,
     IdentityError, verify_account_deletion, verify_revocation,

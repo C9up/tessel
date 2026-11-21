@@ -346,6 +346,25 @@ impl Core {
         self.session.mark_read(group_id).js()
     }
 
+    /// Queues the receipts this device owes (story 05-04), sent at `sent_at`
+    /// (milliseconds); the groups whose queue got some, to send.
+    #[wasm_bindgen(js_name = queueReceipts)]
+    pub fn queue_receipts(&mut self, sent_at: f64) -> Result<JsValue, JsValue> {
+        let sent_at = integer(sent_at)?;
+        to_js(&self.session.queue_receipts(sent_at).js()?)
+    }
+
+    /// Whether this device sends read receipts and records the others'.
+    #[wasm_bindgen(js_name = readReceipts)]
+    pub fn read_receipts(&self) -> bool {
+        self.session.read_receipts()
+    }
+
+    #[wasm_bindgen(js_name = setReadReceipts)]
+    pub fn set_read_receipts(&mut self, on: bool) -> Result<(), JsValue> {
+        self.session.set_read_receipts(on).js()
+    }
+
     /// The groups this device is a member of.
     pub fn groups(&self) -> Result<JsValue, JsValue> {
         to_js(&self.session.groups())

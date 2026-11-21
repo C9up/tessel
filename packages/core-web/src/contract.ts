@@ -232,6 +232,32 @@ export function contract(transports: Record<string, Transport>): void {
       for (const each of [alice.core, bob.core, carol.core]) await each.close()
     })
 
+    test(`${transport}: a message is delivered then read, and read receipts can be turned off`, async () => {
+      const { alice, bob, group } = await pair(make)
+      await alice.core.queueMessage(group, { type: 'text', text: 'hello' }, 1_000)
+      assert.equal((await alice.core.history(group))[0]?.status, 'pending')
+      await bob.core.process((await sendNext(alice.core, group)).encrypted)
+      assert.equal((await alice.core.history(group))[0]?.status, 'sent')
+
+      // Bob's core owes a delivery; once read, a read.
+      assert.deepEqual(await bob.core.queueReceipts(2_000), [group])
+      const delivered = await alice.core.process((await sendNext(bob.core, group)).encrypted)
+      assert.equal(delivered.type === 'message' && delivered.effect, 'receipt')
+      assert.equal((await alice.core.history(group))[0]?.status, 'delivered')
+      await bob.core.markRead(group)
+      await bob.core.queueReceipts(3_000)
+      await alice.core.process((await sendNext(bob.core, group)).encrypted)
+      const [entry] = await alice.core.history(group)
+      assert.deepEqual([entry?.status, entry?.receipts], ['read', [{ account: 'bob@tessel.example', kind: 'read' }]])
+
+      // Off, Bob owes no read, and nothing at all once nothing new arrived.
+      await bob.core.setReadReceipts(false)
+      assert.equal(await bob.core.readReceipts(), false)
+      await bob.core.markRead(group)
+      assert.deepEqual(await bob.core.queueReceipts(4_000), [])
+      for (const each of [alice.core, bob.core]) await each.close()
+    })
+
     test(`${transport}: a media goes through encrypted, its key sealed in the core`, async () => {
       const { alice, bob, group } = await pair(make)
       const file = new Uint8Array(200_000).map((_, i) => i % 251)

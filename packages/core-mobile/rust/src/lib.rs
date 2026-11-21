@@ -284,6 +284,15 @@ impl Host {
                 let (group,): (ByteBuf,) = args(input)?;
                 answer(session.mark_read(&group)?)
             }
+            "queueReceipts" => {
+                let (sent_at,): (u64,) = args(input)?;
+                answer(session.queue_receipts(sent_at)?)
+            }
+            "readReceipts" => answer(session.read_receipts()),
+            "setReadReceipts" => {
+                let (on,): (bool,) = args(input)?;
+                answer(session.set_read_receipts(on)?)
+            }
             "signAccountDeletion" => answer(ByteBuf::from(session.sign_account_deletion()?)),
             "sealProfile" => {
                 let (profile,): (ProfileDto,) = args(input)?;

@@ -31,18 +31,29 @@ export function parseRing(data: unknown): Ring | undefined {
  * cursor only once `deliver` resolved; after each batch it acknowledges the cursor, and
  * the server lets those envelopes go. The app persists the cursor (`cursor`) and gives
  * it back on the next start.
+ *
+ * `settle` runs after each batch is handled and acknowledged: what the app does once
+ * for many envelopes (the messenger sends its receipts, story 05-04). It runs within
+ * the drain, so it must not wait for a drain itself.
  */
 export class Inbox {
   readonly #client: Pick<TesselClient, 'fetch' | 'ack'>
   readonly #deliver: (envelope: ReceivedEnvelope) => Promise<void>
+  readonly #settle: (() => Promise<void>) | undefined
   #cursor: string | undefined
   #draining: Promise<void> | null = null
   #again = false
 
-  constructor(client: Pick<TesselClient, 'fetch' | 'ack'>, deliver: (envelope: ReceivedEnvelope) => Promise<void>, cursor?: string) {
+  constructor(
+    client: Pick<TesselClient, 'fetch' | 'ack'>,
+    deliver: (envelope: ReceivedEnvelope) => Promise<void>,
+    cursor?: string,
+    settle?: () => Promise<void>,
+  ) {
     this.#client = client
     this.#deliver = deliver
     this.#cursor = cursor
+    this.#settle = settle
   }
 
   /** The last envelope handed to `deliver`. */
@@ -84,6 +95,7 @@ export class Inbox {
         // Handled: the server may let them go (story 04-04). The acknowledgement comes
         // after the batch, never before an envelope was handled.
         if (this.#cursor !== undefined) await this.#client.ack(this.#cursor)
+        await this.#settle?.()
       }
     } while (this.#again)
   }

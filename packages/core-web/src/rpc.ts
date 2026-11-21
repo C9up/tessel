@@ -170,6 +170,15 @@ export class RemoteCore implements TesselCore {
   markRead(group: Bytes) {
     return this.#call('markRead', [group])
   }
+  queueReceipts(sentAt: number) {
+    return this.#call('queueReceipts', [sentAt])
+  }
+  readReceipts() {
+    return this.#call('readReceipts', [])
+  }
+  setReadReceipts(on: boolean) {
+    return this.#call('setReadReceipts', [on])
+  }
   signAccountDeletion() {
     return this.#call('signAccountDeletion', [])
   }

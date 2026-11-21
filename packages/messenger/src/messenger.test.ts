@@ -37,6 +37,8 @@ function core(owner: (keyPackage: Uint8Array) => string) {
     incoming: unknown
     team: CoreDevice[]
     trusts: Map<number, Trust>
+    owed: Uint8Array[]
+    readReceiptsOn: boolean
   } = {
     queue: state.queue,
     sent: state.sent,
@@ -44,6 +46,8 @@ function core(owner: (keyPackage: Uint8Array) => string) {
     incoming: undefined,
     team: [],
     trusts: new Map(),
+    owed: [],
+    readReceiptsOn: true,
     device: () => member('alice@tessel.example', 1),
     verifyKeyPackage: (keyPackage) => ({ device: { account: owner(keyPackage), deviceId: keyPackage, certificate: keyPackage } }),
     createGroup: () => {
@@ -83,7 +87,17 @@ function core(owner: (keyPackage: Uint8Array) => string) {
       state.sent.push(state.queue.shift() ?? bytes())
     },
     conversations: () => [],
-    markRead: () => undefined,
+    markRead: () => void state.calls.push('read'),
+    queueReceipts: () => {
+      // Each group owed gets one receipt in its queue.
+      const owed = fake.owed.splice(0)
+      for (const _ of owed) state.queue.push(bytes(4))
+      return owed
+    },
+    readReceipts: () => fake.readReceiptsOn,
+    setReadReceipts: (on) => {
+      fake.readReceiptsOn = on
+    },
     safetyNumber: (contact) => ({ digits: String(contact[0]).padStart(60, '0'), qr: contact }),
     checkScanned: (contact, scanned) => {
       if (scanned[0] !== contact[0]) throw Object.assign(new Error('safety codes differ'), { code: 'safety:mismatch' })
@@ -355,4 +369,36 @@ test('joining a group, or inviting, tells of what changed for verified contacts'
   fake.team = [member('alice@tessel.example', 1), member('bob@tessel.example', 20)]
   const joined = await told(messenger, () => messenger.receive({ id: '2', envelope: toBase64Url(bytes(9)) }))
   assert.deepEqual(joined, [{ type: 'key-changed', group: bytes(9), account: 'bob@tessel.example' }])
+})
+
+test('reading a conversation sends what it owes, catching up if the group moved on', async () => {
+  const fake = core(() => 'bob@tessel.example')
+  const { client, sends } = server({ claimed: {}, refuseFirst: true })
+  let caughtUp = 0
+  fake.owed = [bytes(9)]
+  await quiet(fake, client, async () => void caughtUp++).markRead(bytes(9))
+  assert.deepEqual(fake.calls, ['read'])
+  assert.equal(caughtUp, 1)
+  assert.equal(sends.length, 1)
+  assert.equal(fake.queue.length, 0)
+})
+
+test('settling sends the receipts owed, and leaves them queued rather than catch up from within the inbox', async () => {
+  const fake = core(() => 'bob@tessel.example')
+  const { client, sends } = server({ claimed: {}, refuseFirst: true })
+  let caughtUp = 0
+  const messenger = quiet(fake, client, async () => void caughtUp++)
+  fake.owed = [bytes(9)]
+  await messenger.settle()
+  assert.equal(caughtUp, 0)
+  assert.deepEqual(sends, [])
+  assert.equal(fake.queue.length, 1)
+
+  // Nothing more is owed: settling sends nothing; the receipt left queued goes with the next flush.
+  await messenger.settle()
+  assert.equal(sends.length, 0)
+  await messenger.flush(bytes(9))
+  assert.equal(sends.length, 1)
+  await messenger.setReadReceipts(false)
+  assert.equal(await messenger.readReceipts(), false)
 })

@@ -156,7 +156,20 @@ export type Incoming =
       /** Why it cannot be read (an error code, `message:unsupported-version`…). */
       unreadable?: string
       /** `profile-updated`: fetch the sender's profile again, this device can open it. */
-      effect: 'added' | 'edited' | 'deleted' | 'nothing' | 'ignored' | 'profile-updated'
+      /** `receipt`: another account acknowledged messages of this one, their status may have changed (story 05-04). */
+      effect:
+        | 'added'
+        | 'edited'
+        | 'deleted'
+        | 'nothing'
+        | 'ignored'
+        | 'profile-updated'
+        | 'receipt'
+        | 'edited'
+        | 'deleted'
+        | 'nothing'
+        | 'ignored'
+        | 'profile-updated'
       ignored?: Ignored
     }
   | { type: 'proposal'; group: Bytes; sender: DeviceInfo }
@@ -188,7 +201,13 @@ export interface HistoryEntry {
   deviceId: Bytes
   sentAt: number
   content: Content
+  /** On this account's messages: the accounts that acknowledged it, each with how far (story 05-04). */
+  receipts: { account: string; kind: ReceiptKind }[]
+  /** On this account's messages: still queued, at the server, delivered to or read by every other account of the group. */
+  status?: MessageStatus
 }
+
+export type MessageStatus = 'pending' | 'sent' | 'delivered' | 'read'
 
 /** A queued message: its id, and what the server deduplicates on. */
 export interface Queued {
@@ -244,8 +263,14 @@ export interface TesselCore {
   groups(): Promise<Bytes[]>
   /** The conversation list, the most recently active first (story 05-01). */
   conversations(): Promise<ConversationSummary[]>
-  /** The user read the group up to its last message. */
+  /** The user read the group up to its last message; with read receipts on, the group is owed one (story 05-04). */
   markRead(group: Bytes): Promise<void>
+  /** Queues the receipts this device owes, sent at `sentAt` (ms); the groups whose queue got some, to send (story 05-04). */
+  queueReceipts(sentAt: number): Promise<Bytes[]>
+  /** Whether this device sends read receipts and records the others' (on by default). */
+  readReceipts(): Promise<boolean>
+  /** Read receipts on or off: reciprocal, off sends none and records none. */
+  setReadReceipts(on: boolean): Promise<void>
   /** The devices an envelope for the group goes to: every member but this device (story 04-01). */
   recipients(group: Bytes): Promise<Bytes[]>
   /** On the device holding the account key: its signed revocation of another device of the account (story 03-05). */
@@ -327,6 +352,9 @@ export const METHODS = [
   'recipients',
   'conversations',
   'markRead',
+  'queueReceipts',
+  'readReceipts',
+  'setReadReceipts',
   'signAccountDeletion',
   'sealProfile',
   'openProfile',

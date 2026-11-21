@@ -14,9 +14,10 @@ use crate::groups::{Group, GroupError, GroupId, read_operation, write_operation}
 use crate::history::{self, Effect, History, HistoryEntry, RECENT};
 use crate::identity::{AccountId, AccountKey, Device, DeviceCertificate, IdentityError};
 use crate::key_packages::{KeyPackageError, KeyPackagePool, KeyPackageUpdate};
-use crate::messages::{Body, Message, MessageId};
+use crate::messages::{Body, Message, MessageId, ReceiptKind};
 use crate::outbox::{OUTBOX, Outbox, SendId};
 use crate::profile::{PROFILE_KEYS, ProfileKey, ProfileKeys};
+use crate::receipts::{OWED, READ_RECEIPTS, Receipts};
 use crate::safety::{Contacts, VERIFIED};
 use crate::store::{Changes, PartitionId, Record, Sealer, StoreError, StoreKey};
 
@@ -78,6 +79,8 @@ pub struct Client {
     pub(crate) profile_keys: ProfileKeys,
     /// Where the user stopped reading, per group (story 05-01).
     pub(crate) read_marks: ReadMarks,
+    /// The receipts owed and the read receipts setting (story 05-04).
+    pub(crate) receipts: Receipts,
     persisted: Persisted,
 }
 
@@ -99,6 +102,7 @@ impl Client {
             contacts: Contacts::default(),
             profile_keys: ProfileKeys::default(),
             read_marks: ReadMarks::default(),
+            receipts: Receipts::default(),
             persisted: Persisted {
                 state: key.state_partition()?,
                 sealer,
@@ -122,6 +126,7 @@ impl Client {
         let mut contacts = Contacts::default();
         let mut profile_keys = ProfileKeys::default();
         let mut read_marks = ReadMarks::default();
+        let mut receipts = Receipts::default();
 
         for record in state {
             if record.partition != partition {
@@ -142,6 +147,8 @@ impl Client {
                 VERIFIED => contacts.load(&opened.body)?,
                 PROFILE_KEYS => profile_keys.load(&opened.body)?,
                 READ => read_marks.load(&opened.body)?,
+                OWED => receipts.load_owed(&opened.body)?,
+                READ_RECEIPTS => receipts.load_setting(&opened.body)?,
                 _ => return Err(StoreError::Malformed),
             }
         }
@@ -192,6 +199,7 @@ impl Client {
             contacts,
             profile_keys,
             read_marks,
+            receipts,
             persisted: Persisted {
                 sealer,
                 state: partition,
@@ -295,6 +303,7 @@ impl Client {
         changes.append(self.contacts.take());
         changes.append(self.profile_keys.take());
         changes.append(self.read_marks.take());
+        changes.append(self.receipts.take());
         if client_changed {
             *client = record;
         }
@@ -318,7 +327,9 @@ impl Client {
         records: &[Record],
     ) -> Result<Vec<HistoryEntry>, StoreError> {
         let partition = self.history_partition(group)?;
-        history::read(&self.persisted.sealer, partition, records)
+        let mut entries = history::read(&self.persisted.sealer, partition, records)?;
+        self.set_statuses(group, &mut entries);
+        Ok(entries)
     }
 
     /// The client record: device, pool, groups and their pending intents.
@@ -360,8 +371,16 @@ impl Client {
             self.learn_profile_key(sender.account(), key)?;
             return Ok(Effect::ProfileUpdated);
         }
+        if let Body::Receipt { kind, messages } = &message.body {
+            return self.receive_receipt(group, sender.account(), *kind, messages);
+        }
         let Persisted { sealer, state, .. } = &self.persisted;
-        self.history.apply(sealer, *state, group, sender, message)
+        let effect = self.history.apply(sealer, *state, group, sender, message)?;
+        // What another account wrote arrived: this device owes the group its delivery.
+        if effect == Effect::Added && sender.account() != self.device.certificate().account() {
+            self.owe_receipt(group, ReceiptKind::Delivered, &[message.id])?;
+        }
+        Ok(effect)
     }
 
     /// Queues the account's profile key in `group` (story 03-06): its members can open
@@ -382,6 +401,7 @@ impl Client {
     pub(crate) fn forget_local(&mut self, group: &GroupId) -> Result<Vec<MessageId>, StoreError> {
         let Persisted { sealer, state, .. } = &self.persisted;
         self.history.forget(sealer, *state, group)?;
+        self.receipts.forget(sealer, *state, group)?;
         self.outbox.forget(sealer, *state, group)
     }
 
@@ -403,6 +423,17 @@ impl Client {
     /// A linked device takes its account's profile key from the grant (story 03-04).
     pub(crate) fn set_profile_key(&mut self, key: ProfileKey) {
         self.profile_key = key;
+    }
+
+    /// The receipts owed, with what they need to seal their records.
+    pub(crate) fn receipts_mut(&mut self) -> (&mut Receipts, &Sealer, PartitionId) {
+        let Persisted { sealer, state, .. } = &self.persisted;
+        (&mut self.receipts, sealer, *state)
+    }
+
+    /// The history index, with what it needs to seal its records.
+    pub(crate) fn history_mut(&mut self) -> (&mut History, &Sealer) {
+        (&mut self.history, &self.persisted.sealer)
     }
 
     /// The read markers, with what they need to seal their records.

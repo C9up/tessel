@@ -199,6 +199,18 @@ export class CoreHost implements TesselCore {
     return this.#call((core) => core.markRead(group))
   }
 
+  queueReceipts(sentAt: number): Promise<Bytes[]> {
+    return this.#call((core) => core.queueReceipts(sentAt))
+  }
+
+  readReceipts(): Promise<boolean> {
+    return this.#call((core) => core.readReceipts())
+  }
+
+  setReadReceipts(on: boolean): Promise<void> {
+    return this.#call((core) => core.setReadReceipts(on))
+  }
+
   signAccountDeletion(): Promise<Bytes> {
     return this.#call((core) => own(core.signAccountDeletion()))
   }

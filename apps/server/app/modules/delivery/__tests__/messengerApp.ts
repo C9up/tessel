@@ -100,6 +100,9 @@ function coreOf(device: ThrowawayDevice, seen: string[], processed: unknown[]): 
     outboundSent: (group, sendId) => core.outboundSent(group, sendId),
     conversations: () => core.conversations(),
     markRead: (group) => core.markRead(group),
+    queueReceipts: (sentAt) => core.queueReceipts(sentAt),
+    readReceipts: () => core.readReceipts(),
+    setReadReceipts: (on) => core.setReadReceipts(on),
     safetyNumber: (contact) => core.safetyNumber(contact),
     checkScanned: (contact, scanned) => core.checkScanned(contact, scanned),
     markVerified: (contact) => core.markVerified(contact),
@@ -121,7 +124,12 @@ export async function app(client: ApiClient, device: ThrowawayDevice) {
   const tessel = connect(client, token)
   await tessel.publishKeyPackages(device.refreshKeyPackages(now()))
   const holder: { messenger?: Messenger } = {}
-  const inbox = new Inbox(tessel, async (envelope) => holder.messenger?.receive(envelope))
+  const inbox = new Inbox(
+    tessel,
+    async (envelope) => holder.messenger?.receive(envelope),
+    undefined,
+    async () => holder.messenger?.settle(),
+  )
   const seen: string[] = []
   const processed: unknown[] = []
   const messenger = new Messenger(coreOf(device, seen, processed), tessel, () => inbox.drain(), clock)

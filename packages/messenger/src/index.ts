@@ -92,6 +92,9 @@ export interface MessengerCore {
   outboundSent(group: Bytes, sendId: Bytes): MaybePromise<void>
   conversations(): MaybePromise<readonly { readonly group: Bytes; readonly name: string; readonly lastSentAt?: number; readonly unread: number }[]>
   markRead(group: Bytes): MaybePromise<void>
+  queueReceipts(sentAt: number): MaybePromise<Bytes[]>
+  readReceipts(): MaybePromise<boolean>
+  setReadReceipts(on: boolean): MaybePromise<void>
   safetyNumber(contact: Bytes): MaybePromise<SafetyNumber>
   checkScanned(contact: Bytes, scanned: Bytes): MaybePromise<void>
   markVerified(contact: Bytes): MaybePromise<void>
@@ -340,7 +343,16 @@ export class Messenger {
    * sent again once the device caught up: the core encrypts it anew, under the same send
    * identifier.
    */
-  async flush(group: Bytes): Promise<void> {
+  flush(group: Bytes): Promise<void> {
+    return this.#flush(group, true)
+  }
+
+  /**
+   * Sends the group's queue. Without `catchUp` (from within the inbox, which would wait
+   * for itself), a refusal for a past epoch stops it: what is left goes with the next
+   * flush, once the commit that comes next in the inbox is processed.
+   */
+  async #flush(group: Bytes, catchUp: boolean): Promise<void> {
     for (;;) {
       const outbound = await this.#core.nextOutbound(group)
       if (outbound === undefined) return
@@ -348,6 +360,7 @@ export class Messenger {
         await this.#server.send(outbound.sendId, outbound.encrypted, await this.#core.recipients(group))
       } catch (error) {
         if (!isStale(error)) throw error
+        if (!catchUp) return
         await this.#catchUp()
         continue
       }
@@ -394,9 +407,32 @@ export class Messenger {
     return this.#core.conversations()
   }
 
-  /** The user read the conversation. */
-  markRead(group: Bytes): MaybePromise<void> {
-    return this.#core.markRead(group)
+  /**
+   * The user read the conversation. With read receipts on, the others see it read, and
+   * this account's other devices stop counting it unread (story 05-04).
+   */
+  async markRead(group: Bytes): Promise<void> {
+    await this.#core.markRead(group)
+    for (const owed of await this.#core.queueReceipts(this.#clock())) await this.#flush(owed, true)
+  }
+
+  /**
+   * Sends the receipts this device owes for what it received (story 05-04), a few for
+   * many messages: the inbox's `settle`, run once each batch of envelopes is handled.
+   * From within the inbox, so without catching up.
+   */
+  async settle(): Promise<void> {
+    for (const owed of await this.#core.queueReceipts(this.#clock())) await this.#flush(owed, false)
+  }
+
+  /** Whether this device sends read receipts and sees the others' (on by default). */
+  readReceipts(): MaybePromise<boolean> {
+    return this.#core.readReceipts()
+  }
+
+  /** Read receipts on or off, reciprocal as in WhatsApp: off, this device sends none and records none. Deliveries still go. */
+  setReadReceipts(on: boolean): MaybePromise<void> {
+    return this.#core.setReadReceipts(on)
   }
 
   /**

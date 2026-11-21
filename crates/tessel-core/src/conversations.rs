@@ -8,6 +8,7 @@ use std::collections::HashMap;
 use crate::client::Client;
 use crate::codec::{Reader, Writer};
 use crate::groups::GroupId;
+use crate::messages::ReceiptKind;
 use crate::store::{Changes, PartitionId, Sealer, StoreError};
 
 /// Label of a group's read marker, in the state partition.
@@ -36,11 +37,11 @@ pub(crate) struct ReadMarks {
 }
 
 impl ReadMarks {
-    fn get(&self, group: &GroupId) -> u64 {
+    pub(crate) fn get(&self, group: &GroupId) -> u64 {
         self.marks.get(group).copied().unwrap_or(0)
     }
 
-    fn put(
+    pub(crate) fn put(
         &mut self,
         sealer: &Sealer,
         state: PartitionId,
@@ -100,7 +101,9 @@ impl Client {
         list
     }
 
-    /// The user read the group up to its last message.
+    /// The user read the group up to its last message. With read receipts on (story
+    /// 05-04), the group is owed one for what was just read: the other accounts see
+    /// it read, and this account's other devices stop counting it as unread.
     pub fn mark_read(&mut self, group: &GroupId) -> Result<(), StoreError> {
         let own = self.device.certificate().account().clone();
         let summary = self.history.summary(group, &own, 0);
@@ -108,11 +111,14 @@ impl Client {
             return Ok(());
         }
         let unread_from = summary.last_seq + 1;
-        if unread_from <= self.read_marks.get(group) {
+        let read_from = self.read_marks.get(group);
+        if unread_from <= read_from {
             return Ok(());
         }
+        let read = self.history.unread_ids(group, &own, read_from, unread_from);
         let (marks, sealer, state) = self.read_marks_mut();
-        marks.put(sealer, state, group, unread_from)
+        marks.put(sealer, state, group, unread_from)?;
+        self.owe_receipt(group, ReceiptKind::Read, &read)
     }
 }
 

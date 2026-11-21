@@ -410,6 +410,21 @@ impl Session {
         self.client.mark_read(&group(group_id)).api()
     }
 
+    /// Queues the receipts this device owes (story 05-04), sent at `sent_at`
+    /// (milliseconds); the groups whose queue got some, to send.
+    pub fn queue_receipts(&mut self, sent_at: u64) -> Result<Vec<ByteBuf>, ApiError> {
+        Ok(dto::groups(&self.client.queue_receipts(sent_at).api()?))
+    }
+
+    /// Whether this device sends read receipts and records the others'.
+    pub fn read_receipts(&self) -> bool {
+        self.client.read_receipts()
+    }
+
+    pub fn set_read_receipts(&mut self, on: bool) -> Result<(), ApiError> {
+        self.client.set_read_receipts(on).api()
+    }
+
     /// The groups this device is a member of.
     pub fn groups(&self) -> Vec<ByteBuf> {
         dto::groups(&self.client.groups())

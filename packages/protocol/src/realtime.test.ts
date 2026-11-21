@@ -71,6 +71,20 @@ test('rings during a drain are not lost, nor delivered twice', async () => {
   assert.deepEqual(delivered, ['1', '2', '3', '4'])
 })
 
+test('the inbox settles after each batch, once it is acknowledged', async () => {
+  const { client, acks } = mailbox(() => 5)
+  const settled: string[][] = []
+  const inbox = new Inbox(
+    client,
+    async () => undefined,
+    undefined,
+    async () => void settled.push([...acks]),
+  )
+  await inbox.drain()
+  // Batches 1-2, 3-4 and 5: settled after each acknowledgement, not on the empty fetch.
+  assert.deepEqual(settled, [['2'], ['2', '4'], ['2', '4', '5']])
+})
+
 test('the cursor moves only once an envelope is handled', async () => {
   const { client } = mailbox(() => 3)
   const inbox = new Inbox(client, async (envelope) => {

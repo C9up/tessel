@@ -11,6 +11,7 @@ export {
   type KeyPackageUpdate,
   METHODS,
   type MediaInfo,
+  type MessageStatus,
   type OutgoingBody,
   type OutgoingMedia,
   outboxOf,

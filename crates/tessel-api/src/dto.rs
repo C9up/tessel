@@ -12,7 +12,8 @@ use tessel_core::{
     AccountId, Avatar, Body, Content, Conversation, DeviceCertificate, DeviceId, Effect,
     EncryptedMedia, EnvelopeHeader, EnvelopeKind, GroupChange, GroupId, GroupSettings,
     HistoryEntry, Incoming, KeyPackageUpdate, MediaRef, MediaSeal, Message, MessageId, Outbound,
-    Outgoing, PartitionId, Profile, ReceiptKind, Record, RecordId, Removal, SafetyNumber, Trust,
+    Outgoing, PartitionId, Profile, ReceiptKind, Record, RecordId, Removal, SafetyNumber, Status,
+    Trust,
 };
 
 fn bytes(value: impl Into<Vec<u8>>) -> ByteBuf {
@@ -420,6 +421,7 @@ fn effect(effect: Effect) -> (&'static str, Option<&'static str>) {
         Effect::Nothing => ("nothing", None),
         Effect::Ignored(reason) => ("ignored", Some(ignored(reason))),
         Effect::ProfileUpdated => ("profile-updated", None),
+        Effect::Receipt => ("receipt", None),
     }
 }
 
@@ -586,6 +588,27 @@ pub struct HistoryEntryDto {
     device_id: ByteBuf,
     sent_at: u64,
     content: ContentDto,
+    /// On this account's messages: who acknowledged it, and how far (story 05-04).
+    receipts: Vec<ReceiptDto>,
+    /// On this account's messages: `pending`, `sent`, `delivered` or `read`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    status: Option<&'static str>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReceiptDto {
+    account: String,
+    kind: &'static str,
+}
+
+fn status(status: Status) -> &'static str {
+    match status {
+        Status::Pending => "pending",
+        Status::Sent => "sent",
+        Status::Delivered => "delivered",
+        Status::Read => "read",
+    }
 }
 
 impl HistoryEntryDto {
@@ -596,6 +619,15 @@ impl HistoryEntryDto {
             author: entry.author.to_string(),
             device_id: bytes(entry.device.as_bytes().to_vec()),
             sent_at: entry.sent_at,
+            receipts: entry
+                .receipts
+                .iter()
+                .map(|receipt| ReceiptDto {
+                    account: receipt.account.to_string(),
+                    kind: receipt_kind(receipt.kind),
+                })
+                .collect(),
+            status: entry.status.map(status),
             content: match entry.content {
                 Content::Text {
                     text,

@@ -21,7 +21,7 @@ use std::str::FromStr as _;
 use crate::codec::{Reader, Writer};
 use crate::groups::GroupId;
 use crate::identity::{AccountId, DeviceCertificate, DeviceId};
-use crate::messages::{Body, MediaRef, Message, MessageId, read_id};
+use crate::messages::{Body, MediaRef, Message, MessageId, ReceiptKind, read_id};
 use crate::store::{Changes, PartitionId, Record, Sealer, StoreError};
 
 /// Number of recent messages per group that an edit or a deletion can target.
@@ -31,6 +31,7 @@ const HISTORY: &[u8] = b"history";
 const MESSAGE: &[u8] = b"message";
 const EDIT: &[u8] = b"edit";
 const DELETED: &[u8] = b"deleted";
+const RECEIPT: &[u8] = b"receipt";
 pub(crate) const RECENT: &[u8] = b"recent";
 
 /// What a received or sent message changed in the history.
@@ -42,8 +43,11 @@ pub enum Effect {
     Edited,
     /// The targeted message was deleted.
     Deleted,
-    /// Nothing to keep: a receipt, or an unreadable message.
+    /// Nothing to keep: a receipt about nothing shown, or an unreadable message.
     Nothing,
+    /// Another account acknowledged messages of this one (story 05-04): their status
+    /// may have changed.
+    Receipt,
     /// An edit, a deletion or a message that was not applied.
     Ignored(Ignored),
     /// The sender's account shared its profile key (story 03-06): the app fetches its
@@ -78,6 +82,41 @@ pub struct HistoryEntry {
     pub sent_at: u64,
     /// What it says now.
     pub content: Content,
+    /// On this account's messages: the accounts that acknowledged it, each with the
+    /// furthest it got (story 05-04). Empty on other accounts' messages.
+    pub receipts: Vec<Receipt>,
+    /// On this account's messages: where it stands for the group (story 05-04).
+    pub status: Option<Status>,
+}
+
+/// An account that acknowledged one of this account's messages.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Receipt {
+    /// The account.
+    pub account: AccountId,
+    /// How far: delivered to one of its devices, or read.
+    pub kind: ReceiptKind,
+}
+
+/// Where one of this account's messages stands, as the conversation shows it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Status {
+    /// Still in the send queue.
+    Pending,
+    /// The server has it.
+    Sent,
+    /// Every other account of the group got it on a device.
+    Delivered,
+    /// Every other account of the group read it.
+    Read,
+}
+
+/// How far a receipt goes: read covers delivered.
+fn reach(kind: ReceiptKind) -> u8 {
+    match kind {
+        ReceiptKind::Delivered => 1,
+        ReceiptKind::Read => 2,
+    }
 }
 
 /// The content of a history message, its last edit applied.
@@ -353,6 +392,90 @@ impl History {
         }
     }
 
+    /// Records that `from`, another account, acknowledged `ids`: only this account's
+    /// recent messages count (`own`), the others are not this device's to track.
+    /// Whether any did.
+    pub(crate) fn acknowledge(
+        &mut self,
+        sealer: &Sealer,
+        group: &GroupId,
+        own: &AccountId,
+        from: &AccountId,
+        kind: ReceiptKind,
+        ids: &[MessageId],
+    ) -> Result<bool, StoreError> {
+        let Some(recent) = self.recent.get(group) else {
+            return Ok(false);
+        };
+        let history = partition(sealer, group)?;
+        let mut changes = Changes::default();
+        for entry in recent
+            .iter()
+            .filter(|entry| &entry.author == own && !entry.deleted && ids.contains(&entry.id))
+        {
+            // Named after the message, the account and the kind: the same receipt again
+            // writes the same record, and a read never erases the delivery.
+            let mut name = message_name(own, &entry.id)?;
+            let mut suffix = Writer::default();
+            suffix.vec16(from.to_string().as_bytes())?;
+            suffix.u8(reach(kind));
+            name.extend_from_slice(&suffix.0);
+            let mut body = Writer::default();
+            body.vec16(own.to_string().as_bytes())?;
+            body.bytes(entry.id.as_bytes());
+            body.vec16(from.to_string().as_bytes())?;
+            body.u8(reach(kind));
+            changes
+                .put
+                .push(sealer.seal(history, RECEIPT, &name, &body.0)?);
+        }
+        let any = !changes.put.is_empty();
+        self.pending.append(changes);
+        Ok(any)
+    }
+
+    /// The place after the last of `ids` written by another account than `own`: where
+    /// a device of this account that read them stopped.
+    pub(crate) fn read_up_to(
+        &self,
+        group: &GroupId,
+        own: &AccountId,
+        ids: &[MessageId],
+    ) -> Option<u64> {
+        self.recent
+            .get(group)?
+            .iter()
+            .filter(|entry| &entry.author != own && ids.contains(&entry.id))
+            .map(|entry| entry.seq + 1)
+            .max()
+    }
+
+    /// The messages of other accounts than `own` from place `from` up to (excluded)
+    /// `to`, deleted ones left out: what reading the group up to `to` reads.
+    pub(crate) fn unread_ids(
+        &self,
+        group: &GroupId,
+        own: &AccountId,
+        from: u64,
+        to: u64,
+    ) -> Vec<MessageId> {
+        self.recent
+            .get(group)
+            .map(|recent| {
+                recent
+                    .iter()
+                    .filter(|entry| {
+                        entry.seq >= from
+                            && entry.seq < to
+                            && &entry.author != own
+                            && !entry.deleted
+                    })
+                    .map(|entry| entry.id)
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
     #[cfg(test)]
     pub(crate) fn recent_len(&self, group: &GroupId) -> usize {
         self.recent.get(group).map_or(0, VecDeque::len)
@@ -393,6 +516,7 @@ pub(crate) fn read(
 ) -> Result<Vec<HistoryEntry>, StoreError> {
     let mut messages: HashMap<(AccountId, MessageId), Stored> = HashMap::new();
     let mut edits: HashMap<(AccountId, MessageId), Message> = HashMap::new();
+    let mut receipts: HashMap<(AccountId, MessageId), HashMap<AccountId, u8>> = HashMap::new();
     let mut entries: Vec<(u64, HistoryEntry)> = Vec::new();
 
     for record in records {
@@ -442,8 +566,26 @@ pub(crate) fn read(
                         device,
                         sent_at,
                         content: Content::Deleted,
+                        receipts: Vec::new(),
+                        status: None,
                     },
                 ));
+            }
+            RECEIPT => {
+                let author = read_account(&mut input)?;
+                let id = read_id(&mut input)?;
+                let from = read_account(&mut input)?;
+                let reached = input.u8()?;
+                input.finish()?;
+                if !(1..=2).contains(&reached) {
+                    return Err(StoreError::Malformed);
+                }
+                let furthest = receipts
+                    .entry((author, id))
+                    .or_default()
+                    .entry(from)
+                    .or_default();
+                *furthest = (*furthest).max(reached);
             }
             _ => return Err(StoreError::Malformed),
         }
@@ -452,7 +594,24 @@ pub(crate) fn read(
     // before writing, and the key checks it again here.
     entries.extend(messages.into_iter().map(|(key, stored)| {
         let edit = edits.get(&key);
-        (stored.seq, entry(stored, edit))
+        let mut acknowledged: Vec<Receipt> = receipts
+            .remove(&key)
+            .unwrap_or_default()
+            .into_iter()
+            .map(|(account, reached)| Receipt {
+                account,
+                kind: if reached == 2 {
+                    ReceiptKind::Read
+                } else {
+                    ReceiptKind::Delivered
+                },
+            })
+            .collect();
+        acknowledged.sort_by_key(|receipt| receipt.account.to_string());
+        let seq = stored.seq;
+        let mut entry = entry(stored, edit);
+        entry.receipts = acknowledged;
+        (seq, entry)
     }));
     entries.sort_by_key(|(seq, _)| *seq);
     Ok(entries.into_iter().map(|(_, entry)| entry).collect())
@@ -489,6 +648,8 @@ fn entry(stored: Stored, edit: Option<&Message>) -> HistoryEntry {
         device: stored.sender.device_id(),
         sent_at: stored.message.sent_at,
         content,
+        receipts: Vec::new(),
+        status: None,
     }
 }
 
