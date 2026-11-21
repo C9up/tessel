@@ -143,6 +143,28 @@ for (const [transport, make] of Object.entries(transports)) {
     await bob.core.close()
   })
 
+  test(`${transport}: a profile opens for contacts once its key is shared, and its changes reach them`, async () => {
+    const { alice, bob, group } = await pair(make)
+    const avatar = { contentType: 'image/webp', image: new Uint8Array(500).fill(9) }
+    const blob = await alice.core.sealProfile({ name: 'Alice', avatar })
+    assert.deepEqual(await alice.core.openProfile('alice@tessel.example', blob), { name: 'Alice', avatar })
+    assert.equal(await bob.core.knowsProfile('alice@tessel.example'), false)
+    await assert.rejects(bob.core.openProfile('alice@tessel.example', blob), { name: 'TesselError', code: 'profile:unknown-key' })
+
+    // Alice shares her key: Bob hears of it, and opens her profile.
+    await alice.core.shareProfile(group, Date.now())
+    const shared = await sendNext(alice.core, group)
+    const seen = await bob.core.process(shared.encrypted)
+    assert.equal(seen.type === 'message' && seen.effect, 'profile-updated')
+    assert.equal(seen.type === 'message' && seen.message?.body.type, 'profileKey')
+    assert.deepEqual(await bob.core.openProfile('alice@tessel.example', blob), { name: 'Alice', avatar })
+    // Nothing of it in the history.
+    assert.deepEqual(await bob.core.history(group), [])
+    await assert.rejects(alice.core.sealProfile({ name: '' }), { name: 'TesselError', code: 'profile:invalid' })
+    await alice.core.close()
+    await bob.core.close()
+  })
+
   test(`${transport}: a link refuses a QR code or a grant that is not one`, async () => {
     const { core } = await account(make, 'alice')
     await assert.rejects(core.grantLink(new Uint8Array(10)), { name: 'TesselError', code: 'link:malformed-qr' })

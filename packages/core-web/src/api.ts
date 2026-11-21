@@ -100,6 +100,15 @@ export type Body =
   | { type: 'receipt'; kind: ReceiptKind; messages: Bytes[] }
   | { type: 'edit'; target: Bytes; text: string }
   | { type: 'delete'; target: Bytes }
+  /** The sender's account shared its profile key (story 03-06); the key stays in the core. */
+  | { type: 'profileKey' }
+
+/** What an account shows its contacts (story 03-06). */
+export interface Profile {
+  /** 1 to 128 bytes of UTF-8. */
+  name: string
+  avatar?: { contentType: string; image: Bytes }
+}
 
 export interface ReceivedMessage {
   id: Bytes
@@ -119,7 +128,8 @@ export type Incoming =
       message?: ReceivedMessage
       /** Why it cannot be read (an error code, `message:unsupported-version`…). */
       unreadable?: string
-      effect: 'added' | 'edited' | 'deleted' | 'nothing' | 'ignored'
+      /** `profile-updated`: fetch the sender's profile again, this device can open it. */
+      effect: 'added' | 'edited' | 'deleted' | 'nothing' | 'ignored' | 'profile-updated'
       ignored?: Ignored
     }
   | { type: 'proposal'; group: Bytes; sender: DeviceInfo }
@@ -207,6 +217,14 @@ export interface TesselCore {
   revokeDevice(deviceId: Bytes): Promise<Bytes>
   /** The groups a device of the account is in: to remove it from (`removeDevices`) once revoked. */
   groupsWith(deviceId: Bytes): Promise<Bytes[]>
+
+  /** Seals this account's profile under its profile key: the blob for `identity.setProfile` (story 03-06). */
+  sealProfile(profile: Profile): Promise<Bytes>
+  /** Opens an account's profile blob; `profile:unknown-key` until its devices shared the key. */
+  openProfile(account: string, blob: Bytes): Promise<Profile>
+  knowsProfile(account: string): Promise<boolean>
+  /** Queues the profile key in the group, for its members; its send identifier. */
+  shareProfile(group: Bytes, sentAt: number): Promise<Bytes>
   /** Releases the core and the database. */
   close(): Promise<void>
 
@@ -263,6 +281,10 @@ export const METHODS = [
   'groups',
   'revokeDevice',
   'groupsWith',
+  'sealProfile',
+  'openProfile',
+  'knowsProfile',
+  'shareProfile',
   'close',
   'refreshKeyPackages',
   'verifyKeyPackage',

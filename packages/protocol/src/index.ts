@@ -27,6 +27,8 @@ export const Method = {
   takeLinkGrant: 'identity.takeLinkGrant',
   devices: 'identity.devices',
   revokeDevice: 'identity.revokeDevice',
+  setProfile: 'identity.setProfile',
+  profile: 'identity.profile',
 } as const
 
 /**
@@ -65,6 +67,8 @@ export const ServerError = {
   E_IDENTITY_UNKNOWN_DEVICE: -32013,
   /** Revoking another device takes the account key's signature, and this one does not verify. */
   E_IDENTITY_INVALID_REVOCATION: -32602,
+  /** Not a sealed profile: unknown version, or too large. */
+  E_IDENTITY_INVALID_PROFILE: -32602,
   /** Too many calls from this network: wait, then try again. */
   E_TOO_MANY_REQUESTS: -32029,
 } as const
@@ -327,6 +331,38 @@ export function parseDeviceList(data: unknown): DeviceList {
   throw new ProtocolError('E_PROTOCOL_BAD_RESULT', Method.devices)
 }
 
+/** Parameters of `identity.setProfile`: `TesselCore.sealProfile`, base64url. */
+export interface SetProfileParams {
+  readonly blob: string
+}
+
+/** Response of `identity.setProfile`. */
+export interface ProfileSet {
+  readonly saved: true
+}
+
+/** Parameters of `identity.profile`. */
+export interface ProfileParams {
+  /** `name@domain`. */
+  readonly account: string
+}
+
+/** Response of `identity.profile`: the sealed blob, for `TesselCore.openProfile`; nothing when the account has none. */
+export interface SealedProfile {
+  readonly blob?: string
+}
+
+export function parseProfileSet(data: unknown): ProfileSet {
+  if (isRecord(data) && data.saved === true) return { saved: true }
+  throw new ProtocolError('E_PROTOCOL_BAD_RESULT', Method.setProfile)
+}
+
+export function parseSealedProfile(data: unknown): SealedProfile {
+  if (isRecord(data) && data.blob === undefined) return {}
+  if (isRecord(data) && typeof data.blob === 'string' && fromBase64Url(data.blob) !== undefined) return { blob: data.blob }
+  throw new ProtocolError('E_PROTOCOL_BAD_RESULT', Method.profile)
+}
+
 export function parseDeviceRevoked(data: unknown): DeviceRevoked {
   if (isRecord(data) && data.revoked === true) return { revoked: true }
   throw new ProtocolError('E_PROTOCOL_BAD_RESULT', Method.revokeDevice)
@@ -377,6 +413,10 @@ export interface TesselClient {
   devices(signal?: AbortSignal): Promise<DeviceList>
   /** Revokes a device of the account: itself without `revocation`, another one with `TesselCore.revokeDevice`. */
   revokeDevice(device: Uint8Array, revocation?: Uint8Array, signal?: AbortSignal): Promise<DeviceRevoked>
+  /** Leaves this account's sealed profile (`TesselCore.sealProfile`); then share the key in each group. */
+  setProfile(blob: Uint8Array, signal?: AbortSignal): Promise<ProfileSet>
+  /** The sealed profile of `account`; `undefined` when it has none. */
+  profile(account: string, signal?: AbortSignal): Promise<Uint8Array<ArrayBuffer> | undefined>
 }
 
 export function createTesselClient(transport: RpcTransport, url = '/rpc'): TesselClient {
@@ -414,6 +454,11 @@ export function createTesselClient(transport: RpcTransport, url = '/rpc'): Tesse
         signal,
       }),
     devices: (signal) => rpc.call(Method.devices, {}, { parse: parseDeviceList, signal }),
+    setProfile: (blob, signal) => rpc.call(Method.setProfile, { blob: toBase64Url(blob) } satisfies SetProfileParams, { parse: parseProfileSet, signal }),
+    profile: async (account, signal) => {
+      const { blob } = await rpc.call(Method.profile, { account } satisfies ProfileParams, { parse: parseSealedProfile, signal })
+      return blob === undefined ? undefined : fromBase64Url(blob)
+    },
     revokeDevice: (device, revocation, signal) => {
       const params: RevokeDeviceParams =
         revocation === undefined ? { device: toBase64Url(device) } : { device: toBase64Url(device), revocation: toBase64Url(revocation) }

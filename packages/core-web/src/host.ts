@@ -9,7 +9,17 @@
  */
 
 import { Core, ciphersuite, generateStoreKey, PendingLink, statePartition, verifyKeyPackage, version } from '../generated/tessel_wasm.js'
-import { type DeviceInfo, type LinkGrant, type LinkRequestInfo, type OutgoingBody, type Removal, type TesselCore, TesselError, type Trust } from './api.ts'
+import {
+  type DeviceInfo,
+  type LinkGrant,
+  type LinkRequestInfo,
+  type OutgoingBody,
+  type Profile,
+  type Removal,
+  type TesselCore,
+  TesselError,
+  type Trust,
+} from './api.ts'
 import { type Bytes, IndexedDbStore, loadStoreKey, type StoreChanges } from './store.ts'
 
 export interface CoreHostOptions {
@@ -173,6 +183,22 @@ export class CoreHost implements TesselCore {
 
   groupsWith(deviceId: Bytes): Promise<Bytes[]> {
     return this.#call((core) => core.groupsWith(deviceId))
+  }
+
+  sealProfile(profile: Profile): Promise<Bytes> {
+    return this.#call((core) => own(core.sealProfile(profile)))
+  }
+
+  openProfile(account: string, blob: Bytes): Promise<Profile> {
+    return this.#call((core) => core.openProfile(account, blob))
+  }
+
+  knowsProfile(account: string): Promise<boolean> {
+    return this.#call((core) => core.knowsProfile(account))
+  }
+
+  shareProfile(group: Bytes, sentAt: number): Promise<Bytes> {
+    return this.#call((core) => own(core.shareProfile(group, sentAt)))
   }
 
   /** The store key of a started profile without a device; refuses otherwise. */

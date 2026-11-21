@@ -15,14 +15,14 @@ use serde::Serialize;
 use serde::de::DeserializeOwned;
 use serde_bytes::ByteBuf;
 use tessel_core::{
-    AccountId, Client, DeviceId, GroupId, LinkRequest, MediaSeal, Message, Record, SendId,
+    AccountId, Client, DeviceId, GroupId, LinkRequest, MediaSeal, Message, Profile, Record, SendId,
     StoreKey, decrypt_media, encrypt_media, verify_key_package,
 };
 use wasm_bindgen::prelude::{JsError, JsValue, wasm_bindgen};
 
 use crate::dto::{
     BodyDto, Commit, DeviceInfo, EncryptedFile, HistoryEntryDto, IncomingDto, KeyPackageInfo,
-    KeyPackages, LinkGrantDto, OutboundDto, Queued, RemovalIn, SafetyDto, StoreChanges,
+    KeyPackages, LinkGrantDto, OutboundDto, ProfileDto, Queued, RemovalIn, SafetyDto, StoreChanges,
     StoredRecord, certificate, id16,
 };
 use crate::error::OrJs as _;
@@ -373,6 +373,39 @@ impl Core {
     /// The groups this device is a member of.
     pub fn groups(&self) -> Result<JsValue, JsValue> {
         to_js(&dto::groups(&self.client.groups()))
+    }
+
+    /// Seals this account's profile under its profile key (story 03-06): the blob for
+    /// the server.
+    #[wasm_bindgen(js_name = sealProfile)]
+    pub fn seal_profile(&self, profile: JsValue) -> Result<Vec<u8>, JsValue> {
+        let profile: Profile = from_js::<ProfileDto>(profile)?.into();
+        self.client.seal_profile(&profile).js()
+    }
+
+    /// Opens an account's profile blob, with the key its devices shared.
+    #[wasm_bindgen(js_name = openProfile)]
+    pub fn open_profile(&self, account: &str, blob: &[u8]) -> Result<JsValue, JsValue> {
+        let account = AccountId::parse(account).js()?;
+        to_js(&ProfileDto::from(
+            self.client.open_profile(&account, blob).js()?,
+        ))
+    }
+
+    /// Whether this device can open `account`'s profile.
+    #[wasm_bindgen(js_name = knowsProfile)]
+    pub fn knows_profile(&self, account: &str) -> Result<bool, JsValue> {
+        Ok(self.client.knows_profile(&AccountId::parse(account).js()?))
+    }
+
+    /// Queues this account's profile key in the group: its members can open the
+    /// profile, and fetch it again. The key never reaches the page.
+    #[wasm_bindgen(js_name = shareProfile)]
+    pub fn share_profile(&mut self, group_id: &[u8], sent_at: f64) -> Result<Vec<u8>, JsValue> {
+        let sent_at = from_js::<u64>(JsValue::from_f64(sent_at))?;
+        let send_id = self.client.share_profile(&group(group_id), sent_at).js()?;
+        // Its send identifier only: it has no history entry for the page to show.
+        Ok(send_id.as_bytes().to_vec())
     }
 
     /// The account key's revocation of another device of the account (story 03-05).

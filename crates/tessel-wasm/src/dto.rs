@@ -8,9 +8,9 @@
 use serde::{Deserialize, Serialize};
 use serde_bytes::ByteBuf;
 use tessel_core::{
-    AccountId, Body, Content, DeviceCertificate, DeviceId, Effect, EncryptedMedia, GroupId,
+    AccountId, Avatar, Body, Content, DeviceCertificate, DeviceId, Effect, EncryptedMedia, GroupId,
     HistoryEntry, Incoming, KeyPackageUpdate, MediaRef, MediaSeal, Message, MessageId, Outbound,
-    Outgoing, PartitionId, ReceiptKind, Record, RecordId, Removal, SafetyNumber, Trust,
+    Outgoing, PartitionId, Profile, ReceiptKind, Record, RecordId, Removal, SafetyNumber, Trust,
 };
 use wasm_bindgen::JsValue;
 
@@ -304,6 +304,11 @@ impl BodyDto {
                 target: Some(id(target)),
                 ..Self::default()
             },
+            // The key stays in the core: the page only learns that one was shared.
+            Body::ProfileKey { .. } => Self {
+                kind: "profileKey".into(),
+                ..Self::default()
+            },
         })
     }
 
@@ -415,6 +420,47 @@ fn effect(effect: Effect) -> (&'static str, Option<&'static str>) {
         Effect::Deleted => ("deleted", None),
         Effect::Nothing => ("nothing", None),
         Effect::Ignored(reason) => ("ignored", Some(ignored(reason))),
+        Effect::ProfileUpdated => ("profile-updated", None),
+    }
+}
+
+/// A profile, both ways (story 03-06).
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ProfileDto {
+    name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    avatar: Option<AvatarDto>,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct AvatarDto {
+    content_type: String,
+    image: ByteBuf,
+}
+
+impl From<Profile> for ProfileDto {
+    fn from(profile: Profile) -> Self {
+        Self {
+            name: profile.name,
+            avatar: profile.avatar.map(|avatar| AvatarDto {
+                content_type: avatar.content_type,
+                image: ByteBuf::from(avatar.image),
+            }),
+        }
+    }
+}
+
+impl From<ProfileDto> for Profile {
+    fn from(profile: ProfileDto) -> Self {
+        Self {
+            name: profile.name,
+            avatar: profile.avatar.map(|avatar| Avatar {
+                content_type: avatar.content_type,
+                image: avatar.image.into_vec(),
+            }),
+        }
     }
 }
 

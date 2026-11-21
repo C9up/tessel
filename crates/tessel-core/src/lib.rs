@@ -14,6 +14,7 @@ mod link;
 mod media;
 mod messages;
 mod outbox;
+mod profile;
 mod safety;
 pub mod store;
 mod suite;
@@ -41,6 +42,9 @@ pub use messages::{
     MessageError, MessageId, ReceiptKind,
 };
 pub use outbox::{Outbound, SendId};
+pub use profile::{
+    Avatar, MAX_AVATAR, MAX_DISPLAY_NAME, PROFILE_VERSION, Profile, ProfileError, ProfileKey,
+};
 pub use safety::{SAFETY_NUMBER_DIGITS, SAFETY_QR_VERSION, SafetyError, SafetyNumber, Trust};
 pub use store::{
     Changes, PartitionId, Record, RecordId, STORE_FORMAT, Store, StoreError, StoreKey,

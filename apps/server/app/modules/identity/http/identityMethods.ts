@@ -14,6 +14,8 @@ import {
   fromBase64Url,
   type KeyPackageStock,
   type LinkGrantTaken,
+  type ProfileSet,
+  type SealedProfile,
   type Session,
   type SignedIn,
   type SignedOut,
@@ -22,6 +24,7 @@ import {
 } from '@tessel/protocol'
 import { RpcFailure } from '#modules/shared/http/rpc.js'
 import type { AccountDevices } from '../application/AccountDevices.js'
+import type { AccountProfiles } from '../application/AccountProfiles.js'
 import type { Authenticate } from '../application/Authenticate.js'
 import type { CreateAccount } from '../application/CreateAccount.js'
 import type { KeyPackageDirectory } from '../application/KeyPackageDirectory.js'
@@ -29,6 +32,7 @@ import type { LinkDevice } from '../application/LinkDevice.js'
 import type { SignIn } from '../application/SignIn.js'
 import { IdentityError } from '../domain/account.js'
 import { type KeyPackageUpload, LOW_STOCK, MAX_BATCH } from '../domain/keyPackages.js'
+import { MAX_PROFILE_BLOB } from '../domain/profile.js'
 import { isDeviceKind, type SignedInDevice } from '../domain/session.js'
 
 type Handler = (ctx: HttpContext, params: unknown) => Promise<unknown>
@@ -70,6 +74,12 @@ export const GRANT_POLLS = { requests: 60, duration: '1 minute' } as const
 
 /** Revocations by one device, per hour. */
 export const REVOCATIONS = { requests: 10, duration: '1 hour' } as const
+
+/** Profile changes by one device, per hour. */
+export const PROFILE_CHANGES = { requests: 20, duration: '1 hour' } as const
+
+/** Profile fetches by one device, per minute: a contact list's worth. */
+export const PROFILE_FETCHES = { requests: 120, duration: '1 minute' } as const
 
 /** A sealed grant: a nonce, a certificate, a tag. Well under this. */
 const MAX_GRANT = 1024
@@ -139,6 +149,7 @@ function refused(error: unknown): never {
     if (error.code === 'linkUsed') throw new RpcFailure('E_IDENTITY_LINK_USED')
     if (error.code === 'unknownDevice') throw new RpcFailure('E_IDENTITY_UNKNOWN_DEVICE')
     if (error.code === 'invalidRevocation') throw new RpcFailure('E_IDENTITY_INVALID_REVOCATION')
+    if (error.code === 'invalidProfile') throw new RpcFailure('E_IDENTITY_INVALID_PROFILE')
     throw new RpcFailure('E_IDENTITY_INVALID_CERTIFICATE')
   }
   if (error instanceof ThrottleException) throw new RpcFailure('E_TOO_MANY_REQUESTS', { retryIn: error.response.availableIn })
@@ -159,6 +170,7 @@ export interface IdentityDeps {
   directory: () => Promise<KeyPackageDirectory>
   link: () => Promise<LinkDevice>
   devices: () => Promise<AccountDevices>
+  profiles: () => Promise<AccountProfiles>
 }
 
 /**
@@ -194,7 +206,9 @@ export function identityMethods(
   | 'linkDevice'
   | 'takeLinkGrant'
   | 'devices'
-  | 'revokeDevice',
+  | 'revokeDevice'
+  | 'setProfile'
+  | 'profile',
   Handler
 > {
   const guard = sessionGuard(deps)
@@ -340,6 +354,32 @@ export function identityMethods(
         if (target?.length !== 16 || (params.revocation !== undefined && revocation === undefined)) throw new RpcFailure('E_INVALID_PARAMS')
         await (await deps.devices()).revoke(device, target, revocation)
         return { revoked: true } satisfies DeviceRevoked
+      } catch (error) {
+        refused(error)
+      }
+    },
+
+    setProfile: async (ctx, params) => {
+      const device = await guard(ctx)
+      try {
+        await limiter.use(PROFILE_CHANGES).consume(`identity_profile_set_${deviceKey(device)}`)
+        const blob = isRecord(params) ? decoded(params.blob, MAX_PROFILE_BLOB) : undefined
+        if (blob === undefined) throw new RpcFailure('E_INVALID_PARAMS')
+        await (await deps.profiles()).set(device, blob)
+        return { saved: true } satisfies ProfileSet
+      } catch (error) {
+        refused(error)
+      }
+    },
+
+    profile: async (ctx, params) => {
+      const device = await guard(ctx)
+      try {
+        await limiter.use(PROFILE_FETCHES).consume(`identity_profile_get_${deviceKey(device)}`)
+        const account = isRecord(params) ? params.account : undefined
+        if (typeof account !== 'string' || account.length > 320) throw new RpcFailure('E_INVALID_PARAMS')
+        const blob = await (await deps.profiles()).get(account)
+        return (blob === null ? {} : { blob: toBase64Url(blob) }) satisfies SealedProfile
       } catch (error) {
         refused(error)
       }

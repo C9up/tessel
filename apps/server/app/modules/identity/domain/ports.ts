@@ -44,6 +44,13 @@ export interface Devices {
   list(accountId: string): Promise<DeviceEntry[]>
 }
 
+/** The sealed profiles: one blob per account. */
+export interface Profiles {
+  put(accountId: string, blob: Uint8Array): Promise<void>
+  /** The blob of the account named `name`; `null` when it has none. */
+  get(name: string): Promise<Uint8Array | null>
+}
+
 /** Checks a device revocation: the core does, with the account key the server keeps. */
 export interface RevocationVerifier {
   verify(account: string, deviceId: Uint8Array, accountKey: Uint8Array, revocation: Uint8Array): boolean

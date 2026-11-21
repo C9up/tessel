@@ -5,7 +5,8 @@
 //!    leaves it; the QR carries the public key only.
 //! 2. A device of the account that holds the account key scans it
 //!    ([`Client::grant_link`]): it certifies the new device's key and seals the
-//!    certificate under a key derived from the secret. The server relays the sealed grant
+//!    certificate, with the account's profile key (story 03-06), under a key derived
+//!    from the secret. The server relays the sealed grant
 //!    under the link identifier, a mailbox it cannot read.
 //! 3. The new device opens the grant ([`LinkRequest::accept`]): it checks that the
 //!    certificate is valid and certifies its own key and identifier, then starts as a
@@ -25,8 +26,10 @@ use openmls_traits::types::HashType;
 use zeroize::Zeroizing;
 
 use crate::client::Client;
+use crate::codec::{Reader, Writer};
 use crate::groups::GroupId;
 use crate::identity::{Device, DeviceCertificate, DeviceId, DeviceKey, IdentityError};
+use crate::profile::ProfileKey;
 use crate::store::{StoreError, StoreKey};
 
 /// Version of the QR code's content.
@@ -131,14 +134,25 @@ impl LinkRequest {
     /// Opens the grant and starts the new device's client, with a new store key. The
     /// certificate must be valid and certify this very key and identifier.
     pub fn accept(self, grant: &[u8], store_key: &StoreKey) -> Result<Client, LinkError> {
-        let certificate = open(&*grant_key(&self.link, &self.secret)?, &self.link, grant)?;
+        let opened = Zeroizing::new(open(
+            &*grant_key(&self.link, &self.secret)?,
+            &self.link,
+            grant,
+        )?);
+        // The certificate, then the account's profile key (story 03-06).
+        let mut input = Reader(&opened);
+        let certificate = input.vec16().map_err(|_| LinkError::BadGrant)?;
+        let profile_key = ProfileKey::from_bytes(input.array().map_err(|_| LinkError::BadGrant)?);
+        input.finish().map_err(|_| LinkError::BadGrant)?;
         let certificate =
-            DeviceCertificate::from_bytes(&certificate).map_err(|_| LinkError::WrongCertificate)?;
+            DeviceCertificate::from_bytes(certificate).map_err(|_| LinkError::WrongCertificate)?;
         if certificate.device_id() != self.device_id {
             return Err(LinkError::WrongCertificate);
         }
         let device = Device::new(self.key, certificate).map_err(|_| LinkError::WrongCertificate)?;
-        Ok(Client::new(device, store_key)?)
+        let mut client = Client::new(device, store_key)?;
+        client.set_profile_key(profile_key);
+        Ok(client)
     }
 }
 
@@ -247,10 +261,17 @@ impl Client {
             scanned.device_id,
             &scanned.device_key,
         )?;
+        // The certificate, then the account's profile key (story 03-06).
+        let mut grant = Writer::default();
+        grant
+            .vec16(&certificate.to_bytes()?)
+            .map_err(|_| LinkError::Crypto)?;
+        grant.bytes(self.profile_key().as_bytes());
+        let grant = Zeroizing::new(grant.0);
         let sealed = seal(
             &*grant_key(&scanned.link, &scanned.secret)?,
             &scanned.link,
-            &certificate.to_bytes()?,
+            &grant,
         )?;
         Ok(LinkGrant {
             link: scanned.link,

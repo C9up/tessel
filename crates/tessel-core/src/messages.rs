@@ -38,6 +38,7 @@ use openmls_traits::random::OpenMlsRand;
 use zeroize::Zeroizing;
 
 use crate::codec::{CodecError, Reader, Writer};
+use crate::profile::ProfileKey;
 
 /// Version of the format written by this core.
 pub const MESSAGE_VERSION: u8 = 1;
@@ -61,6 +62,7 @@ const KIND_MEDIA: u8 = 2;
 const KIND_RECEIPT: u8 = 3;
 const KIND_EDIT: u8 = 4;
 const KIND_DELETE: u8 = 5;
+const KIND_PROFILE_KEY: u8 = 6;
 
 /// What the format can reject.
 #[derive(Debug, Clone, thiserror::Error, PartialEq, Eq)]
@@ -210,6 +212,13 @@ pub enum Body {
         /// The deleted message.
         target: MessageId,
     },
+    /// The sender's account shares its profile key (story 03-06): the group's members can
+    /// open its profile, and fetch it again. Sent by [`crate::Client::share_profile`]; it
+    /// leaves no trace in the history, and the page never sees the key.
+    ProfileKey {
+        /// The account's profile key.
+        key: ProfileKey,
+    },
 }
 
 /// An application message.
@@ -276,6 +285,7 @@ impl Message {
                 out.vec16(text.as_bytes())?;
             }
             Body::Delete { target } => out.bytes(&target.0),
+            Body::ProfileKey { key } => out.bytes(key.as_bytes()),
         }
         let mut bytes = out.0;
         bytes.resize(padded_len(bytes.len()), 0);
@@ -291,7 +301,7 @@ impl Message {
             return Err(MessageError::UnsupportedVersion(version));
         }
         let kind = input.u8()?;
-        if !(KIND_TEXT..=KIND_DELETE).contains(&kind) {
+        if !(KIND_TEXT..=KIND_PROFILE_KEY).contains(&kind) {
             return Err(MessageError::UnknownKind(kind));
         }
         let id = read_id(&mut input)?;
@@ -336,8 +346,11 @@ impl Message {
                 target: read_id(&mut input)?,
                 text: input.string16()?,
             },
-            _ => Body::Delete {
+            KIND_DELETE => Body::Delete {
                 target: read_id(&mut input)?,
+            },
+            _ => Body::ProfileKey {
+                key: ProfileKey::from_bytes(input.array()?),
             },
         };
 
@@ -377,7 +390,7 @@ impl Message {
                 n if n > MAX_RECEIPT => Err("too many receipts"),
                 _ => Ok(()),
             },
-            Body::Delete { .. } => Ok(()),
+            Body::Delete { .. } | Body::ProfileKey { .. } => Ok(()),
         }
     }
 }
@@ -390,6 +403,7 @@ impl Body {
             Self::Receipt { .. } => KIND_RECEIPT,
             Self::Edit { .. } => KIND_EDIT,
             Self::Delete { .. } => KIND_DELETE,
+            Self::ProfileKey { .. } => KIND_PROFILE_KEY,
         }
     }
 }

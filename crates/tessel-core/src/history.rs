@@ -46,6 +46,9 @@ pub enum Effect {
     Nothing,
     /// An edit, a deletion or a message that was not applied.
     Ignored(Ignored),
+    /// The sender's account shared its profile key (story 03-06): the app fetches its
+    /// profile again, which this device can now open.
+    ProfileUpdated,
 }
 
 /// Why a message was not applied to the history.
@@ -165,7 +168,7 @@ impl History {
             recent.and_then(|recent| recent.iter().find(|r| r.id == *id && &r.author == author))
         };
         match &message.body {
-            Body::Receipt { .. } => None,
+            Body::Receipt { .. } | Body::ProfileKey { .. } => None,
             Body::Text { .. } | Body::Media { .. } => {
                 find(&message.id).map(|_| Ignored::DuplicateId)
             }
@@ -199,7 +202,7 @@ impl History {
 
         // Everything is sealed first; the index only changes once nothing can fail.
         let effect = match &message.body {
-            Body::Receipt { .. } => Effect::Nothing,
+            Body::Receipt { .. } | Body::ProfileKey { .. } => Effect::Nothing,
             Body::Text { .. } | Body::Media { .. } => {
                 let entry = Recent {
                     id: message.id,

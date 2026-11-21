@@ -63,3 +63,18 @@ export class DeviceRevoked extends DomainEvent {
     this.deviceId = deviceId
   }
 }
+
+/**
+ * `identity.profile.updated`: an account sealed a new profile (story 03-06). Its devices
+ * tell their contacts in their groups (MLS); this event names the account's opaque
+ * identifier only.
+ */
+export class ProfileUpdated extends DomainEvent {
+  readonly type = 'identity.profile.updated'
+  readonly accountId: string
+
+  constructor(accountId: string) {
+    super()
+    this.accountId = accountId
+  }
+}

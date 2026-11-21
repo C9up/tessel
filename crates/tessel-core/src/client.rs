@@ -9,18 +9,19 @@ use openmls_traits::OpenMlsProvider;
 use zeroize::Zeroizing;
 
 use crate::codec::{Reader, Writer};
-use crate::groups::{Group, GroupId, read_operation, write_operation};
+use crate::groups::{Group, GroupError, GroupId, read_operation, write_operation};
 use crate::history::{self, Effect, History, HistoryEntry, RECENT};
 use crate::identity::{AccountId, AccountKey, Device, DeviceCertificate, IdentityError};
 use crate::key_packages::{KeyPackageError, KeyPackagePool, KeyPackageUpdate};
-use crate::messages::{Message, MessageId};
+use crate::messages::{Body, Message, MessageId};
 use crate::outbox::{OUTBOX, Outbox, SendId};
+use crate::profile::{PROFILE_KEYS, ProfileKey, ProfileKeys};
 use crate::safety::{Contacts, VERIFIED};
 use crate::store::{Changes, PartitionId, Record, Sealer, StoreError, StoreKey};
 
-/// Version of the client record. (Version 1, without the account key, was never
-/// released.)
-const CLIENT_VERSION: u8 = 2;
+/// Version of the client record. (Versions 1, without the account key, and 2, without
+/// the profile key, were never released.)
+const CLIENT_VERSION: u8 = 3;
 
 /// Label of the client record: the device, the pool and the list of groups.
 const CLIENT: &[u8] = b"client";
@@ -65,11 +66,15 @@ pub struct Client {
     /// The account key, on the device that holds it: it certifies the account's other
     /// devices (story 03-04).
     account_key: Option<AccountKey>,
+    /// The account's profile key (story 03-06): every device of the account has it.
+    profile_key: ProfileKey,
     key_packages: KeyPackagePool,
     pub(crate) groups: HashMap<GroupId, Group>,
     pub(crate) history: History,
     pub(crate) outbox: Outbox,
     pub(crate) contacts: Contacts,
+    /// The profile keys contacts shared.
+    pub(crate) profile_keys: ProfileKeys,
     persisted: Persisted,
 }
 
@@ -83,11 +88,13 @@ impl Client {
             provider: OpenMlsRustCrypto::default(),
             device,
             account_key: None,
+            profile_key: ProfileKey::generate().map_err(|_| StoreError::NoRandomness)?,
             key_packages: KeyPackagePool::default(),
             groups: HashMap::new(),
             history: History::default(),
             outbox: Outbox::default(),
             contacts: Contacts::default(),
+            profile_keys: ProfileKeys::default(),
             persisted: Persisted {
                 state: key.state_partition()?,
                 sealer,
@@ -109,6 +116,7 @@ impl Client {
         let mut history = History::default();
         let mut outbox = Outbox::default();
         let mut contacts = Contacts::default();
+        let mut profile_keys = ProfileKeys::default();
 
         for record in state {
             if record.partition != partition {
@@ -127,6 +135,7 @@ impl Client {
                 RECENT => history.load(&opened.body)?,
                 OUTBOX => outbox.load(&opened.body)?,
                 VERIFIED => contacts.load(&opened.body)?,
+                PROFILE_KEYS => profile_keys.load(&opened.body)?,
                 _ => return Err(StoreError::Malformed),
             }
         }
@@ -152,6 +161,7 @@ impl Client {
             1 => Some(AccountKey::read_from(&mut input)?),
             _ => return Err(StoreError::Malformed),
         };
+        let profile_key = ProfileKey::from_bytes(input.array()?);
         let key_packages = KeyPackagePool::read_from(&mut input)?;
         let mut groups = HashMap::new();
         for _ in 0..input.u32()? {
@@ -168,11 +178,13 @@ impl Client {
             provider,
             device,
             account_key,
+            profile_key,
             key_packages,
             groups,
             history,
             outbox,
             contacts,
+            profile_keys,
             persisted: Persisted {
                 sealer,
                 state: partition,
@@ -274,6 +286,7 @@ impl Client {
         changes.append(self.history.take());
         changes.append(self.outbox.take());
         changes.append(self.contacts.take());
+        changes.append(self.profile_keys.take());
         if client_changed {
             *client = record;
         }
@@ -312,6 +325,7 @@ impl Client {
                 key.write_to(&mut out)?;
             }
         }
+        out.bytes(self.profile_key.as_bytes());
         self.key_packages.write_to(&mut out)?;
         let mut groups: Vec<_> = self.groups.iter().collect();
         groups.sort_by(|a, b| a.0.as_bytes().cmp(b.0.as_bytes()));
@@ -330,8 +344,29 @@ impl Client {
         sender: &DeviceCertificate,
         message: &Message,
     ) -> Result<Effect, StoreError> {
+        if let Body::ProfileKey { key } = &message.body {
+            // Kept, never in the history; the account's own key changes nothing here.
+            if sender.account() == self.device.certificate().account() {
+                return Ok(Effect::Nothing);
+            }
+            self.learn_profile_key(sender.account(), key)?;
+            return Ok(Effect::ProfileUpdated);
+        }
         let Persisted { sealer, state, .. } = &self.persisted;
         self.history.apply(sealer, *state, group, sender, message)
+    }
+
+    /// Queues the account's profile key in `group` (story 03-06): its members can open
+    /// the profile, and fetch it again. To call in every group after sealing a new
+    /// profile, and for a new contact.
+    pub fn share_profile(&mut self, group: &GroupId, sent_at: u64) -> Result<SendId, GroupError> {
+        let message = Message::new(
+            sent_at,
+            Body::ProfileKey {
+                key: self.profile_key.clone(),
+            },
+        )?;
+        self.queue_message(group, &message)
     }
 
     /// Drops the history index and the send queue of a group the device left; returns
@@ -350,6 +385,22 @@ impl Client {
     ) -> Result<SendId, StoreError> {
         let Persisted { sealer, state, .. } = &self.persisted;
         self.outbox.push(sealer, *state, group, message)
+    }
+
+    /// This account's profile key.
+    pub(crate) fn profile_key(&self) -> &ProfileKey {
+        &self.profile_key
+    }
+
+    /// A linked device takes its account's profile key from the grant (story 03-04).
+    pub(crate) fn set_profile_key(&mut self, key: ProfileKey) {
+        self.profile_key = key;
+    }
+
+    /// The contacts' profile keys, with what they need to seal their records.
+    pub(crate) fn profile_keys_mut(&mut self) -> (&mut ProfileKeys, &Sealer, PartitionId) {
+        let Persisted { sealer, state, .. } = &self.persisted;
+        (&mut self.profile_keys, sealer, *state)
     }
 
     /// The verified contacts, with what they need to seal their records.

@@ -14,6 +14,8 @@ import {
   parseKeyPackageStock,
   parseLinkGrantTaken,
   parsePong,
+  parseProfileSet,
+  parseSealedProfile,
   parseSession,
   parseSignedIn,
   parseSignedOut,
@@ -117,4 +119,12 @@ test('device list answers are checked', () => {
   assert.throws(() => parseDeviceList({ devices: [{ ...entry, kind: 'toaster' }] }), ProtocolError)
   assert.deepEqual(parseDeviceRevoked({ revoked: true }), { revoked: true })
   assert.throws(() => parseDeviceRevoked({}), ProtocolError)
+})
+
+test('profile answers are checked', () => {
+  assert.deepEqual(parseProfileSet({ saved: true }), { saved: true })
+  assert.throws(() => parseProfileSet({}), ProtocolError)
+  assert.deepEqual(parseSealedProfile({}), {})
+  assert.deepEqual(parseSealedProfile({ blob: 'AQID' }), { blob: 'AQID' })
+  assert.throws(() => parseSealedProfile({ blob: 'not base64!' }), ProtocolError)
 })

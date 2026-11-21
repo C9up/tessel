@@ -36,6 +36,7 @@ export type IdentityErrorCode =
   | 'linkUsed'
   | 'unknownDevice'
   | 'invalidRevocation'
+  | 'invalidProfile'
 
 export class IdentityError extends Error {
   readonly code: IdentityErrorCode

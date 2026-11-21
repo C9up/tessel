@@ -4,7 +4,7 @@
  * call. Arguments and results are plain objects, copied by the structured clone.
  */
 
-import { METHODS, type TesselCore, TesselError } from './api.ts'
+import { METHODS, type Profile, type TesselCore, TesselError } from './api.ts'
 import type { Bytes } from './store.ts'
 
 /** A worker, the worker's global scope, or a `MessagePort`. */
@@ -152,6 +152,18 @@ export class RemoteCore implements TesselCore {
   }
   groupsWith(deviceId: Bytes) {
     return this.#call('groupsWith', [deviceId])
+  }
+  sealProfile(profile: Profile) {
+    return this.#call('sealProfile', [profile])
+  }
+  openProfile(account: string, blob: Bytes) {
+    return this.#call('openProfile', [account, blob])
+  }
+  knowsProfile(account: string) {
+    return this.#call('knowsProfile', [account])
+  }
+  shareProfile(group: Bytes, sentAt: number) {
+    return this.#call('shareProfile', [group, sentAt])
   }
   close() {
     return this.#call('close', [])

@@ -7,7 +7,7 @@ use std::fmt::Display;
 use js_sys::{Error, Reflect};
 use tessel_core::{
     ClientError, GroupError, IdentityError, Ignored, KeyPackageError, LinkError, MediaError,
-    MessageError, SafetyError, StoreError,
+    MessageError, ProfileError, SafetyError, StoreError,
 };
 use wasm_bindgen::JsValue;
 
@@ -192,5 +192,19 @@ impl Code for LinkError {
             Self::Crypto => "crypto",
         };
         format!("link:{case}")
+    }
+}
+
+impl Code for ProfileError {
+    fn code(&self) -> String {
+        let case = match self {
+            Self::Store(error) => return error.code(),
+            Self::Invalid(_) => "invalid",
+            Self::Altered => "altered",
+            Self::UnknownKey => "unknown-key",
+            Self::UnsupportedVersion(_) => "unsupported-version",
+            Self::Crypto => "crypto",
+        };
+        format!("profile:{case}")
     }
 }

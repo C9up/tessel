@@ -119,6 +119,10 @@ export interface ThrowawayDevice {
   grantLink(qr: Uint8Array): { link: Uint8Array<ArrayBuffer>; certificate: Uint8Array<ArrayBuffer>; grant: Uint8Array<ArrayBuffer> }
   /** `TesselCore.revokeDevice`: on an account's first device, it revokes another one. */
   revokeDevice(deviceId: Uint8Array): Uint8Array
+  /** `TesselCore.sealProfile`. */
+  sealProfile(profile: { name: string }): Uint8Array
+  /** `TesselCore.openProfile`: the display name, or `undefined` when it does not open. */
+  openProfileName(account: string, blob: Uint8Array): string | undefined
   /** Drops its keys. */
   free(): void
 }
@@ -132,6 +136,15 @@ function throwaway(core: Core): ThrowawayDevice {
     refreshKeyPackages: (now) => core.refreshKeyPackages(now),
     grantLink: (qr) => core.grantLink(qr),
     revokeDevice: (deviceId) => core.revokeDevice(deviceId),
+    sealProfile: (profile) => core.sealProfile(profile),
+    openProfileName: (account, blob) => {
+      try {
+        const opened: { name: string } = core.openProfile(account, blob)
+        return opened.name
+      } catch {
+        return undefined
+      }
+    },
     free: () => core.free(),
   }
 }

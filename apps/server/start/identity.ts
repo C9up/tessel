@@ -3,6 +3,7 @@ import type { RpcRouter } from '@c9up/ream/rpc/router'
 import app from '@c9up/ream/services/app'
 import { Method } from '@tessel/protocol'
 import { AccountDevices } from '#modules/identity/application/AccountDevices.js'
+import { AccountProfiles } from '#modules/identity/application/AccountProfiles.js'
 import { Authenticate } from '#modules/identity/application/Authenticate.js'
 import { CreateAccount } from '#modules/identity/application/CreateAccount.js'
 import { KeyPackageDirectory } from '#modules/identity/application/KeyPackageDirectory.js'
@@ -18,6 +19,7 @@ import { keyDbLinkMailbox } from '#modules/identity/infrastructure/KeyDbLinkMail
 import { SqlAccounts } from '#modules/identity/infrastructure/SqlAccounts.js'
 import { SqlDevices } from '#modules/identity/infrastructure/SqlDevices.js'
 import { SqlKeyPackages } from '#modules/identity/infrastructure/SqlKeyPackages.js'
+import { SqlProfiles } from '#modules/identity/infrastructure/SqlProfiles.js'
 import { WardenSessions } from '#modules/identity/infrastructure/WardenSessions.js'
 import env from '#start/env.js'
 
@@ -28,9 +30,10 @@ interface Identity {
   directory: KeyPackageDirectory
   link: LinkDevice
   devices: AccountDevices
+  profiles: AccountProfiles
 }
 
-/** The identity module's use cases (03-01 to 03-05), composed once, on first use. */
+/** The identity module's use cases (03-01 to 03-06), composed once, on first use. */
 let composed: Promise<Identity> | null = null
 function identity(): Promise<Identity> {
   composed ??= app.container.make<AsyncDatabaseConnection>('db').then((db) => {
@@ -44,6 +47,7 @@ function identity(): Promise<Identity> {
       directory: new KeyPackageDirectory(coreKeyPackages, devices, new SqlKeyPackages(db), domain),
       link: new LinkDevice(coreCertificates, devices, keyDbLinkMailbox),
       devices: new AccountDevices(devices, coreRevocations),
+      profiles: new AccountProfiles(new SqlProfiles(db), domain),
     }
   })
   return composed
@@ -57,6 +61,7 @@ export const identityDeps = {
   directory: async () => (await identity()).directory,
   link: async () => (await identity()).link,
   devices: async () => (await identity()).devices,
+  profiles: async () => (await identity()).profiles,
 }
 
 /** The identity module's RPC points. */
@@ -74,4 +79,6 @@ export function registerIdentityMethods(rpc: RpcRouter): void {
   rpc.method(Method.takeLinkGrant, points.takeLinkGrant)
   rpc.method(Method.devices, points.devices)
   rpc.method(Method.revokeDevice, points.revokeDevice)
+  rpc.method(Method.setProfile, points.setProfile)
+  rpc.method(Method.profile, points.profile)
 }
