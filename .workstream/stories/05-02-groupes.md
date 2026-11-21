@@ -4,7 +4,7 @@ title: "Groupes"
 description: "Créer un groupe de proches, le nommer, inviter, retirer et quitter."
 tags: [product]
 status: draft
-state: todo
+state: review
 parent: epics/05-conversations.md
 depends_on: [stories/05-01-conversation-a-deux.md]
 priority: high
