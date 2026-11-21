@@ -4,7 +4,7 @@ title: "Vérifier un interlocuteur"
 description: "Comparer les codes de sécurité et marquer un contact comme vérifié."
 tags: [product]
 status: draft
-state: todo
+state: review
 parent: epics/05-conversations.md
 depends_on: [stories/02-09-codes-de-securite.md, stories/05-01-conversation-a-deux.md]
 priority: high
