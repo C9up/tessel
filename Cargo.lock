@@ -1853,6 +1853,7 @@ dependencies = [
  "openmls_rust_crypto",
  "openmls_traits",
  "rusqlite",
+ "serde_json",
  "sha2 0.11.1",
  "thiserror",
  "tls_codec",

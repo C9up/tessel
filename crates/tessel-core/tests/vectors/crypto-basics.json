@@ -1,0 +1,45 @@
+[
+  {
+    "cipher_suite": 1,
+    "derive_secret": {
+      "label": "DeriveSecret",
+      "out": "e0d9f5de2914b2e018dd6efeb17dbb1d412e9f3687e6dbd1a1604c9b06dc817d",
+      "secret": "328f5dde49dd58c97511c651be7ebe3abb2cc124d0721ae999ae2a81a8d3d867"
+    },
+    "derive_tree_secret": {
+      "generation": 2694881440,
+      "label": "DeriveTreeSecret",
+      "length": 32,
+      "out": "fb6a4bb14ab71b87ef4d681a1e2b1cf60f43db4d3453f5450d78c99038314560",
+      "secret": "647b34c8054c1dd471f534520829d11562f6281ca06cf6ebf763285573084d69"
+    },
+    "encrypt_with_label": {
+      "ciphertext": "4a22e124c9fd1d643aa24ea5b3f619b7a057b76577e58c6981e0499ba1a0dd093d6268335145e0ce337adfb7e539c836",
+      "context": "4d361cb2467d026b21012a099c0ee2503a1dd66706fc3c567a40a1582c19e7ca",
+      "kem_output": "bc19b7998ffd548b67d14a1ebac651b307b0dff359e4c599ddafb0691d58cf56",
+      "label": "EncryptWithLabel",
+      "plaintext": "4643fe152285ff61d8345ff0d0b36c648a52141d1b3c6431f83d40660657243b",
+      "priv": "6ac910db28ccafe3e1819672b17be638cc087474d2e437ccf259871f552cdba7",
+      "pub": "dedd07d9cf60e32523ced9bb80e496e4c4bf50efa381d7225e288764c3af691c"
+    },
+    "expand_with_label": {
+      "context": "b980b868d7f7299bb4746308d1137a8b6dd8adc285904109e85744bb82e7ce61",
+      "label": "ExpandWithLabel",
+      "length": 16,
+      "out": "b9bd30befa385f8ee1aca89dec70f45c",
+      "secret": "70ba3d1ba25577f3ab1f657896c81f9017f001dd16adf103c5f3c4a64d1566df"
+    },
+    "ref_hash": {
+      "label": "RefHash",
+      "out": "2b4e7d394c697423980c61d328c092f53a2f281003a56c3c2e6d0247d04631b4",
+      "value": "d6118d082d81be525739f3386c1276bf6c93dee043a51bdc90f8acee4aa3a559"
+    },
+    "sign_with_label": {
+      "content": "ec0050f527ca7e9e22d050d1ff2914025b66572a0b53d0bad66860be54b4c067",
+      "label": "SignWithLabel",
+      "priv": "0e0ebe3af8b15d3f774257223ccb07e75241dea117c514138344460db07e779f",
+      "pub": "d412afae39be053c8606cea6e6d5961a73ef55eedc1c67b417d3cb4af8e05cea",
+      "signature": "b2a730f27bd610715d635901eea817ed251d584e72f8deac46c643e78f7e331e6d16d54b0c0d84c23d43b28897d677c4afb078b94330d063c6b7c6741ad85d09"
+    }
+  }
+]
