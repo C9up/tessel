@@ -742,3 +742,28 @@ fn a_rejected_renaming_is_replayed_on_the_up_to_date_state() {
     b.process(&retried.commit).unwrap();
     assert_eq!(b.group_settings(&group).unwrap().name, "ours");
 }
+
+#[test]
+fn a_message_written_before_a_commit_stays_its_author_s_even_once_their_leaf_is_gone() {
+    // Bob writes twice; Alice, before reading, removes him and adds Dave, who may take
+    // his place in the tree.
+    let (group, mut a, mut b) = pair();
+    let bob = b.device().certificate().clone();
+    let first = b.send_message(&group, &text_message("one")).unwrap();
+    let second = b.send_message(&group, &text_message("two")).unwrap();
+    a.remove_devices(&group, &[Removal::Account(bob.account().clone())])
+        .unwrap();
+    a.commit_accepted(&group).unwrap();
+    let mut d = Account::new("dave").device();
+    let out = a.add_devices(&group, &[key_package(&mut d)]).unwrap();
+    a.commit_accepted(&group).unwrap();
+    d.join_group(out.welcome.as_ref().unwrap()).unwrap();
+
+    // Both are read as Bob's, from the epoch they were written in: never as Dave's.
+    for message in [first, second] {
+        match a.process(&message).unwrap() {
+            Incoming::Message { sender, .. } => assert_eq!(sender, bob),
+            other => panic!("expected a message, got {other:?}"),
+        }
+    }
+}

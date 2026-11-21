@@ -802,7 +802,12 @@ impl Client {
         let provider = &self.provider;
         let state = self.groups.get_mut(&id).ok_or(GroupError::UnknownGroup)?;
         let processed = state.mls.process_message(provider, message).map_err(mls)?;
-        let sender = sender_certificate(&state.mls, processed.sender())?;
+        // Read from the message's epoch, not today's tree: a message written just before
+        // a commit may come from a device that commit removed (story 05-04).
+        if !matches!(processed.sender(), Sender::Member(_)) {
+            return Err(GroupError::Malformed);
+        }
+        let sender = DeviceCertificate::from_sender_credential(processed.credential())?;
 
         match processed.into_content() {
             ProcessedMessageContent::ApplicationMessage(data) => {

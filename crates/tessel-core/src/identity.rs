@@ -630,6 +630,20 @@ impl DeviceCertificate {
         }
         Ok(certificate)
     }
+
+    /// The certificate of a message's sender, from the *credential* MLS resolved in the
+    /// message's own epoch: a message written just before a commit stays its author's,
+    /// even once the commit removed them or gave their leaf to another device. The leaf's
+    /// signing key was matched to the certificate when the leaf entered the group
+    /// ([`Self::from_credential`]), and MLS verified the message with it; the account
+    /// signature is verified again.
+    pub fn from_sender_credential(credential: &Credential) -> Result<Self, IdentityError> {
+        let basic = BasicCredential::try_from(credential.clone())
+            .map_err(|_| IdentityError::NotBasicCredential)?;
+        let certificate = Self::from_bytes(basic.identity())?;
+        certificate.verify()?;
+        Ok(certificate)
+    }
 }
 
 impl fmt::Debug for DeviceCertificate {
