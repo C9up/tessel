@@ -4,7 +4,7 @@ title: "Accusés de réception et de lecture"
 description: "Savoir si un message est arrivé et s'il a été lu, si l'autre l'accepte."
 tags: [product]
 status: draft
-state: todo
+state: review
 parent: epics/05-conversations.md
 depends_on: [stories/05-01-conversation-a-deux.md]
 priority: medium
