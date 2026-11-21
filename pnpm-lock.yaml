@@ -176,29 +176,29 @@ importers:
   apps/server:
     dependencies:
       '@c9up/atlas':
-        specifier: ^0.3.23
-        version: 0.3.23(@c9up/helix@0.2.14)(@c9up/ream@0.2.30)
+        specifier: ^0.3.24
+        version: 0.3.24(@c9up/helix@0.2.15)(@c9up/ream@0.2.31)
       '@c9up/blackhole':
-        specifier: ^0.1.27
-        version: 0.1.27(@c9up/quasar@0.2.3)(@c9up/ream@0.2.30)
+        specifier: ^0.1.28
+        version: 0.1.28(@c9up/quasar@0.2.4)(@c9up/ream@0.2.31)
       '@c9up/chronos':
-        specifier: ^0.1.16
-        version: 0.1.16
+        specifier: ^0.1.17
+        version: 0.1.17
       '@c9up/quasar':
-        specifier: ^0.2.3
-        version: 0.2.3(@c9up/ream@0.2.30)(supports-color@8.1.1)
+        specifier: ^0.2.4
+        version: 0.2.4(@c9up/ream@0.2.31)(supports-color@8.1.1)
       '@c9up/ream':
-        specifier: ^0.2.30
-        version: 0.2.30(@c9up/comet@0.1.5)(@c9up/quasar@0.2.3)(supports-color@8.1.1)
+        specifier: ^0.2.31
+        version: 0.2.31(@c9up/comet@0.1.5)(@c9up/quasar@0.2.4)(supports-color@8.1.1)
       '@c9up/rune':
-        specifier: ^0.2.3
-        version: 0.2.3
+        specifier: ^0.2.4
+        version: 0.2.4
       '@c9up/spectrum':
         specifier: ^0.1.19
-        version: 0.1.19(@c9up/ream@0.2.30)
+        version: 0.1.19(@c9up/ream@0.2.31)
       '@c9up/warden':
         specifier: ^0.2.7
-        version: 0.2.7(@c9up/quasar@0.2.3)(@c9up/ream@0.2.30)
+        version: 0.2.7(@c9up/quasar@0.2.4)(@c9up/ream@0.2.31)
       '@tessel/core-web':
         specifier: workspace:*
         version: link:../../packages/core-web
@@ -210,11 +210,11 @@ importers:
         version: 0.2.2
     devDependencies:
       '@c9up/helix':
-        specifier: ^0.2.14
-        version: 0.2.14
+        specifier: ^0.2.15
+        version: 0.2.15
       '@c9up/helix-plugin-ream':
-        specifier: ^0.1.9
-        version: 0.1.9(@c9up/helix@0.2.14)(@c9up/ream@0.2.30)
+        specifier: ^0.1.10
+        version: 0.1.10(@c9up/helix@0.2.15)(@c9up/ream@0.2.31)
       '@c9up/ream-cli':
         specifier: ^0.3.20
         version: 0.3.20
@@ -327,8 +327,8 @@ packages:
   '@borewit/text-codec@0.2.3':
     resolution: {integrity: sha512-49CycTz1aAZmvFcwkeFyhud1HUmRIB5Tabf7ALV+VA4Iu85MTfz2cUwzPagMFAdVBvrWdkCxG67I30tUwwpKsw==}
 
-  '@c9up/atlas@0.3.23':
-    resolution: {integrity: sha512-UQlq/1YO2F8aSjD6g3HeNbEm8oGVsi2sHUsArIk7Eo3rYbYMYdvWW8mukhgsBDCKiC4CTSS6sfYBKc04pdMQKQ==}
+  '@c9up/atlas@0.3.24':
+    resolution: {integrity: sha512-iBBPH3Jf+72TU/wwRAZZJ3tGX3HHI/myBpzLCFHJ+//WicVlAYH7ibvmLfKx0Oewriy/oCMx/eEEVzka6AGuoQ==}
     engines: {node: '>=24.0.0'}
     peerDependencies:
       '@c9up/helix': ^0.2.0
@@ -342,8 +342,8 @@ packages:
       '@faker-js/faker':
         optional: true
 
-  '@c9up/blackhole@0.1.27':
-    resolution: {integrity: sha512-4kCOHB1s7nJoR9xQNl3woPDVgiAGVFiqai6+yM2TnLFmuYgMXXONV4bdpT+YNjSOQwS0y3EP6yxqDgmiLwAQoQ==}
+  '@c9up/blackhole@0.1.28':
+    resolution: {integrity: sha512-zj6EHR7BEnbbXlTTvPE08WpuPy89danl3zDKVZHlKe4yQL1SU8uGN7B0Mv8+eleWh3jBiz6uZi+jN11l/r1JWQ==}
     engines: {node: '>=24.0.0'}
     peerDependencies:
       '@c9up/quasar': ^0.1.0 || ^0.2.0
@@ -357,23 +357,23 @@ packages:
       hono:
         optional: true
 
-  '@c9up/chronos@0.1.16':
-    resolution: {integrity: sha512-9ZXehf8ERU4BRZz6itzlKHkK9X9Z6X9iQQ+sKFprsb6w2S1auOnAha1yJhdBvQ2Nek8yZSp61EqLqZVPPUogbA==}
+  '@c9up/chronos@0.1.17':
+    resolution: {integrity: sha512-dRmoCCakmFch3AMz3SkAZ1qgu4D1StHUAB537ZnuTSfe04pFHr/tJ+XrQQ930WY0zsH+pPrwb+8w68AQIHBwtg==}
     engines: {node: '>=24.0.0'}
 
   '@c9up/comet@0.1.5':
     resolution: {integrity: sha512-pVKPn8m5ZoejI3FPQWiRTrlJ+iAmWg4ESbOYwyGm05WjGytgsoLOK8N4gwnUSIzTFc8N/k8jHE0qTa/tgUxC/g==}
     engines: {node: '>=24.0.0'}
 
-  '@c9up/helix-plugin-ream@0.1.9':
-    resolution: {integrity: sha512-HrAPSdQO2icWcGfwkEKQMCqcOwFZoxD7PyMzaWUWdFszrWDoq0Npo+y1V7eeAmGOKHFjgnCVdkWgq5O5eV64PQ==}
+  '@c9up/helix-plugin-ream@0.1.10':
+    resolution: {integrity: sha512-ZNh6+dVHlf3ZxvWU43gijTGp9ci3j8dbglH9ZEUsEiLL90OdgfjSVyNE47zlNzadgAsXe/8RR3bEkp33aWMT9A==}
     engines: {node: '>=24.0.0'}
     peerDependencies:
-      '@c9up/helix': ^0.2.3
+      '@c9up/helix': ^0.2.13
       '@c9up/ream': ^0.2.7
 
-  '@c9up/helix@0.2.14':
-    resolution: {integrity: sha512-RGRlt1v8BpBjspT0t/RSjlRPmKJiP3xFX5OBmuteGw5dXYY6Uw9UWKjY70l/xtbndDTUragxe0JXyBEJ23MHtA==}
+  '@c9up/helix@0.2.15':
+    resolution: {integrity: sha512-NuVs4G4ml5PuuVyKqEQwCR10hizr+mJBuJtj7qolahDzcYF6JIXwhc7Aec/VZworaBK3mtJefnYmmM5HuFlRTQ==}
     engines: {node: '>=24.0.0'}
     hasBin: true
 
@@ -381,8 +381,8 @@ packages:
     resolution: {integrity: sha512-sZad52tF1aKPoGCVmp2pOWqPyzIwBsq3cMf8IXgsqPdLMjsTNLXmjvEhLhH30SEpkW6Xtsy5ZPWqQ6fitcoGoA==}
     engines: {node: '>=24.0.0'}
 
-  '@c9up/quasar@0.2.3':
-    resolution: {integrity: sha512-CDd8sbIKftRsmg3CdQweyHBFpvgrgmBMfVsNQ4RpTdKKV9drw5LlUU3WkZVCR/6jc2aSbhmYo70jsnf+vGDDmg==}
+  '@c9up/quasar@0.2.4':
+    resolution: {integrity: sha512-Awh4GtMZ7DStCQHQa+GtN4zNA39ZuF4IpOOlR8gXTPzn77UI0SFPzvAPMY5EdNktup1ipLCrYs17lPgHkdpBIA==}
     engines: {node: '>=24.0.0'}
     peerDependencies:
       '@c9up/ream': ^0.2.26
@@ -424,8 +424,8 @@ packages:
     resolution: {integrity: sha512-X36LTe19zGpdb37uqm3KUeKYdAZR4RzrzjL0vKHVLdk3Uf+gv8mX/Bv0WuU8M+qdjyq4pGF+i+crA7iEr7D1YA==}
     hasBin: true
 
-  '@c9up/ream@0.2.30':
-    resolution: {integrity: sha512-6jVxV3Mxs2hmIFeEtQAQv9cCb+W8jSD+qsh4pjlXFBJ6imArncUf0RJqdZeuMP1nJL4m5n+yMHDIry5d05b3Tw==}
+  '@c9up/ream@0.2.31':
+    resolution: {integrity: sha512-5BIcVV26ufs3hXce59Rv2iUDPOgMQ6SzO7L4SClFD1sZdY5bGfnBMEc7liRTmXbWwerV0EkjwvH1CV/O3oiRoQ==}
     engines: {node: '>=24.0.0'}
     peerDependencies:
       '@c9up/comet': ^0.1.0
@@ -439,8 +439,8 @@ packages:
       '@c9up/quasar':
         optional: true
 
-  '@c9up/rune@0.2.3':
-    resolution: {integrity: sha512-hhYj7ep3QMOxnsvQuHnGIUUD3Digpm3+KTltK2gPnakkj6tv7kvX3avRl1iYa17Nq26Hsl3ZVOPILIOs7lSPkw==}
+  '@c9up/rune@0.2.4':
+    resolution: {integrity: sha512-zkLSvEh+HGulyNqnr7ORdPIBPGraWqZpjTZiPiOjx1Qm6bOx3hvewYf9emOXurBscKD4AipjVrGYZs2wKA6p1Q==}
     engines: {node: '>=24.0.0'}
 
   '@c9up/spectrum@0.1.19':
@@ -977,37 +977,37 @@ snapshots:
 
   '@borewit/text-codec@0.2.3': {}
 
-  '@c9up/atlas@0.3.23(@c9up/helix@0.2.14)(@c9up/ream@0.2.30)':
+  '@c9up/atlas@0.3.24(@c9up/helix@0.2.15)(@c9up/ream@0.2.31)':
     dependencies:
-      '@c9up/chronos': 0.1.16
+      '@c9up/chronos': 0.1.17
       reflect-metadata: 0.2.2
     optionalDependencies:
-      '@c9up/helix': 0.2.14
-      '@c9up/ream': 0.2.30(@c9up/comet@0.1.5)(@c9up/quasar@0.2.3)(supports-color@8.1.1)
+      '@c9up/helix': 0.2.15
+      '@c9up/ream': 0.2.31(@c9up/comet@0.1.5)(@c9up/quasar@0.2.4)(supports-color@8.1.1)
 
-  '@c9up/blackhole@0.1.27(@c9up/quasar@0.2.3)(@c9up/ream@0.2.30)':
+  '@c9up/blackhole@0.1.28(@c9up/quasar@0.2.4)(@c9up/ream@0.2.31)':
     optionalDependencies:
-      '@c9up/quasar': 0.2.3(@c9up/ream@0.2.30)(supports-color@8.1.1)
-      '@c9up/ream': 0.2.30(@c9up/comet@0.1.5)(@c9up/quasar@0.2.3)(supports-color@8.1.1)
+      '@c9up/quasar': 0.2.4(@c9up/ream@0.2.31)(supports-color@8.1.1)
+      '@c9up/ream': 0.2.31(@c9up/comet@0.1.5)(@c9up/quasar@0.2.4)(supports-color@8.1.1)
 
-  '@c9up/chronos@0.1.16': {}
+  '@c9up/chronos@0.1.17': {}
 
   '@c9up/comet@0.1.5': {}
 
-  '@c9up/helix-plugin-ream@0.1.9(@c9up/helix@0.2.14)(@c9up/ream@0.2.30)':
+  '@c9up/helix-plugin-ream@0.1.10(@c9up/helix@0.2.15)(@c9up/ream@0.2.31)':
     dependencies:
-      '@c9up/helix': 0.2.14
-      '@c9up/ream': 0.2.30(@c9up/comet@0.1.5)(@c9up/quasar@0.2.3)(supports-color@8.1.1)
+      '@c9up/helix': 0.2.15
+      '@c9up/ream': 0.2.31(@c9up/comet@0.1.5)(@c9up/quasar@0.2.4)(supports-color@8.1.1)
 
-  '@c9up/helix@0.2.14': {}
+  '@c9up/helix@0.2.15': {}
 
   '@c9up/lumen@0.1.2': {}
 
-  '@c9up/quasar@0.2.3(@c9up/ream@0.2.30)(supports-color@8.1.1)':
+  '@c9up/quasar@0.2.4(@c9up/ream@0.2.31)(supports-color@8.1.1)':
     dependencies:
       ioredis: 6.0.0(supports-color@8.1.1)
     optionalDependencies:
-      '@c9up/ream': 0.2.30(@c9up/comet@0.1.5)(@c9up/quasar@0.2.3)(supports-color@8.1.1)
+      '@c9up/ream': 0.2.31(@c9up/comet@0.1.5)(@c9up/quasar@0.2.4)(supports-color@8.1.1)
     transitivePeerDependencies:
       - supports-color
 
@@ -1034,27 +1034,27 @@ snapshots:
       '@c9up/ream-cli-linux-x64': 0.3.20
       '@c9up/ream-cli-win32-x64': 0.3.20
 
-  '@c9up/ream@0.2.30(@c9up/comet@0.1.5)(@c9up/quasar@0.2.3)(supports-color@8.1.1)':
+  '@c9up/ream@0.2.31(@c9up/comet@0.1.5)(@c9up/quasar@0.2.4)(supports-color@8.1.1)':
     dependencies:
       '@c9up/lumen': 0.1.2
       file-type: 22.3.0(supports-color@8.1.1)
       reflect-metadata: 0.2.2
     optionalDependencies:
       '@c9up/comet': 0.1.5
-      '@c9up/quasar': 0.2.3(@c9up/ream@0.2.30)(supports-color@8.1.1)
+      '@c9up/quasar': 0.2.4(@c9up/ream@0.2.31)(supports-color@8.1.1)
     transitivePeerDependencies:
       - supports-color
 
-  '@c9up/rune@0.2.3': {}
+  '@c9up/rune@0.2.4': {}
 
-  '@c9up/spectrum@0.1.19(@c9up/ream@0.2.30)':
+  '@c9up/spectrum@0.1.19(@c9up/ream@0.2.31)':
     optionalDependencies:
-      '@c9up/ream': 0.2.30(@c9up/comet@0.1.5)(@c9up/quasar@0.2.3)(supports-color@8.1.1)
+      '@c9up/ream': 0.2.31(@c9up/comet@0.1.5)(@c9up/quasar@0.2.4)(supports-color@8.1.1)
 
-  '@c9up/warden@0.2.7(@c9up/quasar@0.2.3)(@c9up/ream@0.2.30)':
+  '@c9up/warden@0.2.7(@c9up/quasar@0.2.4)(@c9up/ream@0.2.31)':
     optionalDependencies:
-      '@c9up/quasar': 0.2.3(@c9up/ream@0.2.30)(supports-color@8.1.1)
-      '@c9up/ream': 0.2.30(@c9up/comet@0.1.5)(@c9up/quasar@0.2.3)(supports-color@8.1.1)
+      '@c9up/quasar': 0.2.4(@c9up/ream@0.2.31)(supports-color@8.1.1)
+      '@c9up/ream': 0.2.31(@c9up/comet@0.1.5)(@c9up/quasar@0.2.4)(supports-color@8.1.1)
 
   '@emnapi/core@1.11.2':
     dependencies:

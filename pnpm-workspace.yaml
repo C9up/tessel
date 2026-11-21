@@ -12,3 +12,5 @@ allowBuilds:
 
 minimumReleaseAgeExclude:
   - '@c9up/warden@0.2.7'
+  - '@c9up/atlas@0.3.24'
+  - '@c9up/blackhole@0.1.28'

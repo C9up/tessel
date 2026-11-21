@@ -25,12 +25,12 @@
     "test": "NODE_ENV=test ream test --threads=1"
   },
   "dependencies": {
-    "@c9up/atlas": "^0.3.23",
-    "@c9up/blackhole": "^0.1.27",
-    "@c9up/chronos": "^0.1.16",
-    "@c9up/quasar": "^0.2.3",
-    "@c9up/ream": "^0.2.30",
-    "@c9up/rune": "^0.2.3",
+    "@c9up/atlas": "^0.3.24",
+    "@c9up/blackhole": "^0.1.28",
+    "@c9up/chronos": "^0.1.17",
+    "@c9up/quasar": "^0.2.4",
+    "@c9up/ream": "^0.2.31",
+    "@c9up/rune": "^0.2.4",
     "@c9up/spectrum": "^0.1.19",
     "@c9up/warden": "^0.2.7",
     "@tessel/core-web": "workspace:*",
@@ -38,8 +38,8 @@
     "reflect-metadata": "^0.2.2"
   },
   "devDependencies": {
-    "@c9up/helix": "^0.2.14",
-    "@c9up/helix-plugin-ream": "^0.1.9",
+    "@c9up/helix": "^0.2.15",
+    "@c9up/helix-plugin-ream": "^0.1.10",
     "@c9up/ream-cli": "^0.3.20",
     "@swc-node/register": "^1.12.1",
     "@types/node": "^24.19.2",
