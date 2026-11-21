@@ -7,6 +7,9 @@ packages:
 
 # Native/binary postinstall steps we accept to run.
 allowBuilds:
+  # Tailwind's file watcher: its prebuilt binaries come as optional packages, the
+  # script only rebuilds it from source.
+  '@parcel/watcher': false
   "@swc/core": true
   esbuild: true
 

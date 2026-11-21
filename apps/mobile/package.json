@@ -26,7 +26,9 @@
     "@c9up/ream-cli": "^0.3.22",
     "@swc-node/register": "^1.12.1",
     "@swc/core": "^1.16.22",
+    "@tailwindcss/cli": "^4.3.5",
     "@types/node": "^24.19.2",
+    "tailwindcss": "^4.3.5",
     "typescript": "~6.0.3"
   },
   "license": "MIT"
