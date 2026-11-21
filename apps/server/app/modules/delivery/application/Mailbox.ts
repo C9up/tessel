@@ -1,5 +1,5 @@
 import { DeliveryError, MAX_ENVELOPE, MAX_RECIPIENTS, type OutgoingEnvelope, type Placed, type StoredEnvelope } from '../domain/envelope.js'
-import type { EnvelopeReader, Mailboxes } from '../domain/ports.js'
+import type { Doorbell, EnvelopeReader, Mailboxes } from '../domain/ports.js'
 
 const hex = (bytes: Uint8Array) => Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('')
 
@@ -13,10 +13,12 @@ export const FETCH_LIMIT = 100
 export class Mailbox {
   readonly #reader: EnvelopeReader
   readonly #mailboxes: Mailboxes
+  readonly #doorbell: Doorbell
 
-  constructor(reader: EnvelopeReader, mailboxes: Mailboxes) {
+  constructor(reader: EnvelopeReader, mailboxes: Mailboxes, doorbell: Doorbell) {
     this.#reader = reader
     this.#mailboxes = mailboxes
+    this.#doorbell = doorbell
   }
 
   /** Keeps `envelope` from `sender` for its recipients; its identifier. */
@@ -33,6 +35,9 @@ export class Mailbox {
     if (recipients.length > MAX_RECIPIENTS) throw new DeliveryError('invalidEnvelope')
     const placed = await this.#mailboxes.store(sender, envelope.sendId, header, envelope.body, recipients)
     if (placed === null) throw new DeliveryError('staleEpoch')
+    // Kept first, rung after: a device that hears the ring finds the envelope. (A
+    // duplicate rings again; the device's cursor makes that a no-op.)
+    this.#doorbell.ring(recipients, placed.id)
     return placed
   }
 

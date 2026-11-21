@@ -190,6 +190,9 @@ importers:
       '@c9up/ream':
         specifier: ^0.2.31
         version: 0.2.31(@c9up/comet@0.1.5)(@c9up/quasar@0.2.4)(supports-color@8.1.1)
+      '@c9up/relay':
+        specifier: ^0.1.27
+        version: 0.1.27(@c9up/quasar@0.2.4)(@c9up/ream@0.2.31)
       '@c9up/rune':
         specifier: ^0.2.4
         version: 0.2.4
@@ -437,6 +440,18 @@ packages:
       '@c9up/inker':
         optional: true
       '@c9up/quasar':
+        optional: true
+
+  '@c9up/relay@0.1.27':
+    resolution: {integrity: sha512-wBOb6aUs+pfAC0aAhDGMc+rzW/r/UDTuVKtSKhT/p0P9XDoZx+Adramqk7+gtn873qfx6B6Vaw36MgWuRyAGdQ==}
+    engines: {node: '>=24.0.0'}
+    peerDependencies:
+      '@c9up/quasar': ^0.1.0 || ^0.2.0
+      '@c9up/ream': ^0.2.26
+    peerDependenciesMeta:
+      '@c9up/quasar':
+        optional: true
+      '@c9up/ream':
         optional: true
 
   '@c9up/rune@0.2.4':
@@ -1044,6 +1059,11 @@ snapshots:
       '@c9up/quasar': 0.2.4(@c9up/ream@0.2.31)(supports-color@8.1.1)
     transitivePeerDependencies:
       - supports-color
+
+  '@c9up/relay@0.1.27(@c9up/quasar@0.2.4)(@c9up/ream@0.2.31)':
+    optionalDependencies:
+      '@c9up/quasar': 0.2.4(@c9up/ream@0.2.31)(supports-color@8.1.1)
+      '@c9up/ream': 0.2.31(@c9up/comet@0.1.5)(@c9up/quasar@0.2.4)(supports-color@8.1.1)
 
   '@c9up/rune@0.2.4': {}
 

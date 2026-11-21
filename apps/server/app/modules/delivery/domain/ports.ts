@@ -6,6 +6,15 @@ export interface EnvelopeReader {
   read(body: Uint8Array): EnvelopeHeader | null
 }
 
+/**
+ * Tells devices that an envelope arrived for them (story 04-03): a ring that carries its
+ * identifier, never its body. The mailbox stays the one source of truth: a ring lost on
+ * the way costs nothing, the device fetches from its cursor when it reconnects.
+ */
+export interface Doorbell {
+  ring(devices: readonly Uint8Array[], envelope: string): void
+}
+
 /** The mailboxes. */
 export interface Mailboxes {
   /**

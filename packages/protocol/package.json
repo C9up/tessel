@@ -5,7 +5,8 @@
   "description": "Tessel's client-server contract (comet methods and their types), shared by the server, the web and mobile.",
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./realtime": "./src/realtime.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
