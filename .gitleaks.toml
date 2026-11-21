@@ -10,3 +10,11 @@ useDefault = true
 description = "Package names in lockfiles"
 targetRules = ["generic-api-key"]
 paths = ['''(^|/)Cargo\.lock$''', '''(^|/)pnpm-lock\.yaml$''']
+
+# The official MLS test vectors (story 02-12, tests/vectors/README.md): public values the
+# MLS working group publishes, whose field names (`group_secrets`, `priv`) and random hex
+# look like keys to the generic rule. Every other rule still scans them.
+[[allowlists]]
+description = "Public MLS test vectors"
+targetRules = ["generic-api-key"]
+paths = ['''^crates/tessel-core/tests/vectors/[^/]+\.json$''']

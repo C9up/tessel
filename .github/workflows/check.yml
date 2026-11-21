@@ -82,6 +82,11 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # The WASM core: the web package's tests load it, and the server verifies
+      # certificates with it, so the migrations (which load the app) need it too.
+      - name: Build the web core
+        run: pnpm --filter @tessel/core-web build
+
       # The same stack as on a developer's machine: PostgreSQL over mutual TLS
       # (scripts/stack.sh) and KeyDB (compose.yaml).
       - name: Start the stack
@@ -96,10 +101,6 @@ jobs:
           done
           podman exec tessel-keydb keydb-cli ping
           pnpm --filter @tessel/server migrate
-
-      # The WASM core the web package tests load.
-      - name: Build the web core
-        run: pnpm --filter @tessel/core-web build
 
       - name: pnpm check
         run: pnpm check
