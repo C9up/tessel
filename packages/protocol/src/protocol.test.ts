@@ -12,6 +12,8 @@ import {
   parseDeviceLinked,
   parseDeviceList,
   parseDeviceRevoked,
+  parseEnvelopeSent,
+  parseEnvelopes,
   parseKeyPackageStock,
   parseLinkGrantTaken,
   parsePong,
@@ -133,4 +135,13 @@ test('profile answers are checked', () => {
 test('an account deletion answer is checked', () => {
   assert.deepEqual(parseAccountDeleted({ deleted: true }), { deleted: true })
   assert.throws(() => parseAccountDeleted({ deleted: 'yes' }), ProtocolError)
+})
+
+test('delivery answers are checked', () => {
+  assert.deepEqual(parseEnvelopeSent({ envelope: '42' }), { envelope: '42' })
+  assert.throws(() => parseEnvelopeSent({ envelope: 42 }), ProtocolError)
+  const envelopes = { envelopes: [{ id: '7', envelope: 'AQID' }] }
+  assert.deepEqual(parseEnvelopes(envelopes), envelopes)
+  assert.deepEqual(parseEnvelopes({ envelopes: [] }), { envelopes: [] })
+  assert.throws(() => parseEnvelopes({ envelopes: [{ id: 'x', envelope: 'AQID' }] }), ProtocolError)
 })

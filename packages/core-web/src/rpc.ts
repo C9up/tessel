@@ -153,6 +153,9 @@ export class RemoteCore implements TesselCore {
   groupsWith(deviceId: Bytes) {
     return this.#call('groupsWith', [deviceId])
   }
+  recipients(group: Bytes) {
+    return this.#call('recipients', [group])
+  }
   signAccountDeletion() {
     return this.#call('signAccountDeletion', [])
   }

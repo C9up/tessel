@@ -30,6 +30,8 @@ export const Method = {
   setProfile: 'identity.setProfile',
   profile: 'identity.profile',
   deleteAccount: 'identity.deleteAccount',
+  send: 'delivery.send',
+  fetch: 'delivery.fetch',
 } as const
 
 /**
@@ -72,6 +74,10 @@ export const ServerError = {
   E_IDENTITY_INVALID_PROFILE: -32602,
   /** Deleting the account takes the account key's signature, and this one does not verify. */
   E_IDENTITY_INVALID_DELETION: -32602,
+  /** Not a group's MLS message, empty, or too large. */
+  E_DELIVERY_INVALID_ENVELOPE: -32602,
+  /** An envelope for nobody, the sender left aside. */
+  E_DELIVERY_NO_RECIPIENT: -32602,
   /** Too many calls from this network: wait, then try again. */
   E_TOO_MANY_REQUESTS: -32029,
 } as const
@@ -365,6 +371,58 @@ export interface AccountDeleted {
   readonly deleted: true
 }
 
+/** Parameters of `delivery.send`: an envelope from the core's send queue (`TesselCore.nextOutbound`). */
+export interface SendParams {
+  /** base64url of the 16-byte send identifier: the same envelope sent again keeps it. */
+  readonly sendId: string
+  /** base64url of the MLS message. */
+  readonly envelope: string
+  /** base64url of each device it is for (`TesselCore.recipients`). */
+  readonly recipients: readonly string[]
+}
+
+/** Response of `delivery.send`: the server kept it (or had already). */
+export interface EnvelopeSent {
+  /** The server's identifier of the envelope. */
+  readonly envelope: string
+}
+
+/** Parameters of `delivery.fetch`. */
+export interface FetchParams {
+  /** The last envelope identifier already handled; absent the first time. */
+  readonly after?: string
+}
+
+/** An envelope for this device. */
+export interface ReceivedEnvelope {
+  /** The server's identifier: envelopes come in its order. */
+  readonly id: string
+  /** base64url of the MLS message, for `TesselCore.process` or `TesselCore.joinGroup`. */
+  readonly envelope: string
+}
+
+/** Response of `delivery.fetch`: the next envelopes, oldest first. */
+export interface Envelopes {
+  readonly envelopes: readonly ReceivedEnvelope[]
+}
+
+export function parseEnvelopeSent(data: unknown): EnvelopeSent {
+  if (isRecord(data) && typeof data.envelope === 'string' && /^\d+$/.test(data.envelope)) return { envelope: data.envelope }
+  throw new ProtocolError('E_PROTOCOL_BAD_RESULT', Method.send)
+}
+
+export function parseEnvelopes(data: unknown): Envelopes {
+  if (isRecord(data) && Array.isArray(data.envelopes)) {
+    const envelopes: ReceivedEnvelope[] = []
+    for (const entry of data.envelopes) {
+      if (!isRecord(entry) || typeof entry.id !== 'string' || !/^\d+$/.test(entry.id) || typeof entry.envelope !== 'string') break
+      envelopes.push({ id: entry.id, envelope: entry.envelope })
+    }
+    if (envelopes.length === data.envelopes.length) return { envelopes }
+  }
+  throw new ProtocolError('E_PROTOCOL_BAD_RESULT', Method.fetch)
+}
+
 export function parseAccountDeleted(data: unknown): AccountDeleted {
   if (isRecord(data) && data.deleted === true) return { deleted: true }
   throw new ProtocolError('E_PROTOCOL_BAD_RESULT', Method.deleteAccount)
@@ -437,6 +495,10 @@ export interface TesselClient {
   profile(account: string, signal?: AbortSignal): Promise<Uint8Array<ArrayBuffer> | undefined>
   /** Deletes the account for good (`TesselCore.signAccountDeletion`), once its devices left their groups. */
   deleteAccount(deletion: Uint8Array, signal?: AbortSignal): Promise<AccountDeleted>
+  /** Posts an envelope for `recipients`; sent again with the same `sendId`, it is kept once. */
+  send(sendId: Uint8Array, envelope: Uint8Array, recipients: readonly Uint8Array[], signal?: AbortSignal): Promise<EnvelopeSent>
+  /** The envelopes for this device after `after`, oldest first. */
+  fetch(after?: string, signal?: AbortSignal): Promise<Envelopes>
 }
 
 export function createTesselClient(transport: RpcTransport, url = '/rpc'): TesselClient {
@@ -479,6 +541,12 @@ export function createTesselClient(transport: RpcTransport, url = '/rpc'): Tesse
       const { blob } = await rpc.call(Method.profile, { account } satisfies ProfileParams, { parse: parseSealedProfile, signal })
       return blob === undefined ? undefined : fromBase64Url(blob)
     },
+    send: (sendId, envelope, recipients, signal) =>
+      rpc.call(Method.send, { sendId: toBase64Url(sendId), envelope: toBase64Url(envelope), recipients: recipients.map(toBase64Url) } satisfies SendParams, {
+        parse: parseEnvelopeSent,
+        signal,
+      }),
+    fetch: (after, signal) => rpc.call(Method.fetch, (after === undefined ? {} : { after }) satisfies FetchParams, { parse: parseEnvelopes, signal }),
     deleteAccount: (deletion, signal) =>
       rpc.call(Method.deleteAccount, { deletion: toBase64Url(deletion) } satisfies DeleteAccountParams, { parse: parseAccountDeleted, signal }),
     revokeDevice: (device, revocation, signal) => {

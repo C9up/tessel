@@ -123,6 +123,9 @@ for (const [transport, make] of Object.entries(transports)) {
     }
     assert.deepEqual(await tablet.groups(), [group])
     assert.equal((await tablet.members(group)).length, 3)
+    // Its envelopes go to Alice's phone and to Bob, not to itself (story 04-01).
+    const recipients = (await tablet.recipients(group)).map((id) => id.join()).sort()
+    assert.deepEqual(recipients, [alice.device.deviceId.join(), bob.device.deviceId.join()].sort())
 
     // Deleting the account (story 03-07) takes the account key too.
     assert.equal((await alice.core.signAccountDeletion()).length, 64)

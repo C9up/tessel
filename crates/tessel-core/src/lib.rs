@@ -6,6 +6,7 @@
 
 mod client;
 mod codec;
+mod envelope;
 mod groups;
 mod history;
 mod identity;
@@ -22,6 +23,7 @@ mod suite;
 mod test_support;
 
 pub use client::{Client, ClientError};
+pub use envelope::{EnvelopeError, EnvelopeHeader, EnvelopeKind, inspect_envelope};
 pub use groups::{GroupError, GroupId, Incoming, Outgoing, Removal};
 pub use history::{Content, EDITABLE_MESSAGES, Effect, HistoryEntry, Ignored};
 pub use identity::{

@@ -21,9 +21,9 @@ use tessel_core::{
 use wasm_bindgen::prelude::{JsError, JsValue, wasm_bindgen};
 
 use crate::dto::{
-    BodyDto, Commit, DeviceInfo, EncryptedFile, HistoryEntryDto, IncomingDto, KeyPackageInfo,
-    KeyPackages, LinkGrantDto, OutboundDto, ProfileDto, Queued, RemovalIn, SafetyDto, StoreChanges,
-    StoredRecord, certificate, id16,
+    BodyDto, Commit, DeviceInfo, EncryptedFile, EnvelopeHeaderDto, HistoryEntryDto, IncomingDto,
+    KeyPackageInfo, KeyPackages, LinkGrantDto, OutboundDto, ProfileDto, Queued, RemovalIn,
+    SafetyDto, StoreChanges, StoredRecord, certificate, id16,
 };
 use crate::error::OrJs as _;
 
@@ -79,6 +79,16 @@ pub fn verify(key_package: &[u8]) -> Result<JsValue, JsValue> {
 #[wasm_bindgen(js_name = verifyCertificate)]
 pub fn verify_certificate(certificate_bytes: &[u8]) -> Result<JsValue, JsValue> {
     to_js(&DeviceInfo::of(&certificate(certificate_bytes)?)?)
+}
+
+/// The public header of an envelope (story 04-01): kind, group, epoch. The server routes
+/// on it and reads nothing else. Throws `envelope:malformed` for anything that is not a
+/// group's MLS message.
+#[wasm_bindgen(js_name = inspectEnvelope)]
+pub fn inspect_envelope(envelope: &[u8]) -> Result<JsValue, JsValue> {
+    to_js(&EnvelopeHeaderDto::from(
+        tessel_core::inspect_envelope(envelope).js()?,
+    ))
 }
 
 /// Checks an account deletion (story 03-07): the signature, by `account_key` (the one the
@@ -380,6 +390,14 @@ impl Core {
     pub fn outbound_sent(&mut self, group_id: &[u8], send_id: &[u8]) -> Result<(), JsValue> {
         let send_id = SendId::from_bytes(id16(send_id, "send id")?);
         self.client.outbound_sent(&group(group_id), &send_id).js()
+    }
+
+    /// The devices an envelope for the group goes to: every member but this device
+    /// (story 04-01). For a commit, to take before it is accepted.
+    pub fn recipients(&self, group_id: &[u8]) -> Result<JsValue, JsValue> {
+        to_js(&dto::devices(
+            &self.client.recipients(&group(group_id)).js()?,
+        ))
     }
 
     /// The groups this device is a member of.

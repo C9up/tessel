@@ -8,9 +8,10 @@
 use serde::{Deserialize, Serialize};
 use serde_bytes::ByteBuf;
 use tessel_core::{
-    AccountId, Avatar, Body, Content, DeviceCertificate, DeviceId, Effect, EncryptedMedia, GroupId,
-    HistoryEntry, Incoming, KeyPackageUpdate, MediaRef, MediaSeal, Message, MessageId, Outbound,
-    Outgoing, PartitionId, Profile, ReceiptKind, Record, RecordId, Removal, SafetyNumber, Trust,
+    AccountId, Avatar, Body, Content, DeviceCertificate, DeviceId, Effect, EncryptedMedia,
+    EnvelopeHeader, EnvelopeKind, GroupId, HistoryEntry, Incoming, KeyPackageUpdate, MediaRef,
+    MediaSeal, Message, MessageId, Outbound, Outgoing, PartitionId, Profile, ReceiptKind, Record,
+    RecordId, Removal, SafetyNumber, Trust,
 };
 use wasm_bindgen::JsValue;
 
@@ -652,4 +653,38 @@ pub(crate) struct LinkGrantDto {
     pub(crate) certificate: ByteBuf,
     /// The sealed grant, for the mailbox.
     pub(crate) grant: ByteBuf,
+}
+
+/// The public header of an envelope (story 04-01): what the server routes on.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct EnvelopeHeaderDto {
+    kind: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    group: Option<ByteBuf>,
+    /// The epoch fits a JavaScript number for as long as a group lives.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    epoch: Option<u64>,
+}
+
+impl From<EnvelopeHeader> for EnvelopeHeaderDto {
+    fn from(header: EnvelopeHeader) -> Self {
+        Self {
+            kind: match header.kind {
+                EnvelopeKind::Application => "application",
+                EnvelopeKind::Proposal => "proposal",
+                EnvelopeKind::Commit => "commit",
+                EnvelopeKind::Welcome => "welcome",
+            },
+            group: header.group.map(|group| bytes(group.as_bytes())),
+            epoch: header.epoch,
+        }
+    }
+}
+
+pub(crate) fn devices(devices: &[DeviceId]) -> Vec<ByteBuf> {
+    devices
+        .iter()
+        .map(|device| bytes(device.as_bytes()))
+        .collect()
 }

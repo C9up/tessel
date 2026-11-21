@@ -213,6 +213,8 @@ export interface TesselCore {
   grantLink(qr: Bytes): Promise<LinkGrant>
   /** The groups this device is a member of. */
   groups(): Promise<Bytes[]>
+  /** The devices an envelope for the group goes to: every member but this device (story 04-01). */
+  recipients(group: Bytes): Promise<Bytes[]>
   /** On the device holding the account key: its signed revocation of another device of the account (story 03-05). */
   revokeDevice(deviceId: Bytes): Promise<Bytes>
   /** The groups a device of the account is in: to remove it from (`removeDevices`) once revoked. */
@@ -283,6 +285,7 @@ export const METHODS = [
   'groups',
   'revokeDevice',
   'groupsWith',
+  'recipients',
   'signAccountDeletion',
   'sealProfile',
   'openProfile',

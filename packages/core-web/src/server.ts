@@ -12,6 +12,7 @@ import {
   Core,
   generateStoreKey,
   initSync,
+  inspectEnvelope,
   PendingLink,
   selfCheck,
   verifyCertificate as verify,
@@ -80,6 +81,25 @@ export function checkRevocation(account: string, deviceId: Uint8Array, accountKe
   }
 }
 
+/** The public MLS header of an envelope (story 04-01): what the server may read of it. */
+export interface EnvelopeHeader {
+  kind: 'application' | 'proposal' | 'commit' | 'welcome'
+  /** Absent for a *Welcome*. */
+  group?: Uint8Array<ArrayBuffer>
+  /** Absent for a *Welcome*. */
+  epoch?: number
+}
+
+/** The header of an envelope; `undefined` when it is not a group's MLS message. */
+export function readEnvelope(envelope: Uint8Array): EnvelopeHeader | undefined {
+  loadServerCore()
+  try {
+    return inspectEnvelope(envelope)
+  } catch {
+    return undefined
+  }
+}
+
 /** Whether `deletion` is the signature, by `accountKey` (the one the server keeps), deleting `account` (story 03-07). */
 export function checkAccountDeletion(account: string, accountKey: Uint8Array, deletion: Uint8Array): boolean {
   loadServerCore()
@@ -123,6 +143,8 @@ export interface KeyPackageBatch {
 export interface ThrowawayDevice {
   readonly certificate: Uint8Array<ArrayBuffer>
   readonly deviceId: Uint8Array<ArrayBuffer>
+  /** The core itself, for tests that make groups and envelopes (story 04-01). */
+  readonly core: Core
   /** The proof `TesselCore.signIn` makes. */
   signIn(challenge: Uint8Array): Uint8Array
   /** Its *KeyPackage* pool renewed at `now` (Unix seconds), as `TesselCore.refreshKeyPackages` gives it. */
@@ -146,6 +168,7 @@ function throwaway(core: Core): ThrowawayDevice {
   return {
     certificate: device.certificate,
     deviceId: device.deviceId,
+    core,
     signIn: (challenge) => core.signIn(challenge),
     refreshKeyPackages: (now) => core.refreshKeyPackages(now),
     grantLink: (qr) => core.grantLink(qr),

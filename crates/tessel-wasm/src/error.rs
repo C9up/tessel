@@ -6,8 +6,8 @@ use std::fmt::Display;
 
 use js_sys::{Error, Reflect};
 use tessel_core::{
-    ClientError, GroupError, IdentityError, Ignored, KeyPackageError, LinkError, MediaError,
-    MessageError, ProfileError, SafetyError, StoreError,
+    ClientError, EnvelopeError, GroupError, IdentityError, Ignored, KeyPackageError, LinkError,
+    MediaError, MessageError, ProfileError, SafetyError, StoreError,
 };
 use wasm_bindgen::JsValue;
 
@@ -206,5 +206,13 @@ impl Code for ProfileError {
             Self::Crypto => "crypto",
         };
         format!("profile:{case}")
+    }
+}
+
+impl Code for EnvelopeError {
+    fn code(&self) -> String {
+        match self {
+            Self::Malformed => "envelope:malformed".into(),
+        }
     }
 }

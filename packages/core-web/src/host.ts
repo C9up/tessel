@@ -185,6 +185,10 @@ export class CoreHost implements TesselCore {
     return this.#call((core) => core.groupsWith(deviceId))
   }
 
+  recipients(group: Bytes): Promise<Bytes[]> {
+    return this.#call((core) => core.recipients(group))
+  }
+
   signAccountDeletion(): Promise<Bytes> {
     return this.#call((core) => own(core.signAccountDeletion()))
   }
