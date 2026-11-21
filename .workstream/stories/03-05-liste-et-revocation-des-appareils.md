@@ -4,11 +4,12 @@ title: "Liste et révocation des appareils"
 description: "Voir ses appareils et retirer celui qu'on a perdu."
 tags: [product]
 status: draft
-state: todo
+state: review
 parent: epics/03-comptes-et-appareils.md
 depends_on: [stories/03-04-ajouter-un-appareil-par-qr.md]
 priority: medium
 created: 2026-11-20
+commits: [1f36314cc4618fd4eb5319e2454e61dede149886]
 ---
 
 # Liste et révocation des appareils
