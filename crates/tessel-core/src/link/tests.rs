@@ -172,3 +172,81 @@ fn the_secret_appears_in_no_debug_output() {
     let secret = &qr[1 + LINK_ID_LEN..1 + LINK_ID_LEN + SECRET_LEN];
     assert!(!format!("{request:?}").contains(&format!("{secret:?}")[1..20]));
 }
+
+#[test]
+fn a_revoked_device_leaves_every_group_and_verified_contacts_are_told() {
+    let mut alice = first_device();
+    let mut bob = Account::new("bob").device();
+    let with_bob = crate::test_support::group(&mut alice, &mut [&mut bob]);
+    let request = LinkRequest::new().unwrap();
+    let grant = alice.client.grant_link(&request.qr()).unwrap();
+    let mut tablet = linked(request, &grant.sealed);
+    let key_package = tablet.key_package();
+    let out = alice.client.add_devices(&with_bob, &[key_package]).unwrap();
+    alice.client.commit_accepted(&with_bob).unwrap();
+    alice.persist();
+    bob.client.process(&out.commit).unwrap();
+    tablet
+        .client
+        .join_group(out.welcome.as_ref().unwrap())
+        .unwrap();
+    tablet.persist();
+
+    // Bob verified Alice while the tablet was in their group: it is vouched for.
+    let alice_cert = alice.client.device().certificate().clone();
+    bob.client.mark_verified(&alice_cert).unwrap();
+    bob.persist();
+    let tablet_cert = tablet.client.device().certificate().clone();
+    assert_eq!(bob.client.trust(&tablet_cert), crate::Trust::Verified);
+
+    // The tablet is lost: Alice's phone signs its revocation for the server...
+    let tablet_id = tablet_cert.device_id();
+    let revocation = alice.client.revoke_device(tablet_id).unwrap();
+    crate::identity::verify_revocation(
+        alice_cert.account(),
+        tablet_id,
+        alice_cert.account_key(),
+        &revocation,
+    )
+    .unwrap();
+    // ...and removes it from every group it is in.
+    assert_eq!(alice.client.groups_with(tablet_id), vec![with_bob.clone()]);
+    let removal = crate::groups::Removal::Device(alice_cert.account().clone(), tablet_id);
+    let out = alice.client.remove_devices(&with_bob, &[removal]).unwrap();
+    alice.client.commit_accepted(&with_bob).unwrap();
+    alice.persist();
+    assert!(alice.client.groups_with(tablet_id).is_empty());
+
+    // Bob is told: a verified device of Alice left. Were it to come back, it is new.
+    match bob.client.process(&out.commit).unwrap() {
+        Incoming::Commit {
+            verified_removed, ..
+        } => assert_eq!(verified_removed, vec![tablet_cert.clone()]),
+        other => panic!("expected a commit, got {other:?}"),
+    }
+    bob.persist();
+    assert_eq!(bob.client.trust(&tablet_cert), crate::Trust::NewDevice);
+    bob.restart();
+    assert_eq!(bob.client.trust(&tablet_cert), crate::Trust::NewDevice);
+
+    // The tablet learns it was removed.
+    match tablet.client.process(&out.commit).unwrap() {
+        Incoming::Commit { removed_self, .. } => assert!(removed_self),
+        other => panic!("expected a commit, got {other:?}"),
+    }
+}
+
+#[test]
+fn only_the_device_holding_the_account_key_signs_a_revocation() {
+    let alice = first_device();
+    let request = LinkRequest::new().unwrap();
+    let grant = alice.client.grant_link(&request.qr()).unwrap();
+    let tablet = linked(request, &grant.sealed);
+    assert_eq!(
+        tablet
+            .client
+            .revoke_device(alice.client.device().certificate().device_id())
+            .unwrap_err(),
+        LinkError::NoAccountKey
+    );
+}

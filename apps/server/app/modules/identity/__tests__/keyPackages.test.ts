@@ -72,7 +72,7 @@ async function member(client: ApiClient, prefix: string): Promise<Member> {
   await anonymous.createAccount(device.certificate)
   created.push(name)
   const challenge = await anonymous.challenge()
-  const { token } = await anonymous.signIn(device.deviceId, challenge, device.signIn(challenge))
+  const { token } = await anonymous.signIn(device.deviceId, challenge, device.signIn(challenge), 'web')
   return { account, device, tessel: connect(client, token) }
 }
 

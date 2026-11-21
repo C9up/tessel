@@ -15,8 +15,8 @@ use serde::Serialize;
 use serde::de::DeserializeOwned;
 use serde_bytes::ByteBuf;
 use tessel_core::{
-    AccountId, Client, GroupId, LinkRequest, MediaSeal, Message, Record, SendId, StoreKey,
-    decrypt_media, encrypt_media, verify_key_package,
+    AccountId, Client, DeviceId, GroupId, LinkRequest, MediaSeal, Message, Record, SendId,
+    StoreKey, decrypt_media, encrypt_media, verify_key_package,
 };
 use wasm_bindgen::prelude::{JsError, JsValue, wasm_bindgen};
 
@@ -79,6 +79,20 @@ pub fn verify(key_package: &[u8]) -> Result<JsValue, JsValue> {
 #[wasm_bindgen(js_name = verifyCertificate)]
 pub fn verify_certificate(certificate_bytes: &[u8]) -> Result<JsValue, JsValue> {
     to_js(&DeviceInfo::of(&certificate(certificate_bytes)?)?)
+}
+
+/// Checks a device revocation (story 03-05): the signature, by `account_key` (the one
+/// the caller knows for the account), revoking `device_id` of `account`. Throws otherwise.
+#[wasm_bindgen(js_name = verifyRevocation)]
+pub fn verify_revocation(
+    account: &str,
+    device_id: &[u8],
+    account_key: &[u8],
+    revocation: &[u8],
+) -> Result<(), JsValue> {
+    let account = AccountId::parse(account).js()?;
+    let device = DeviceId::from_bytes(id16(device_id, "device id")?);
+    tessel_core::verify_revocation(&account, device, account_key, revocation).js()
 }
 
 /// Checks a sign-in proof (story 03-02): the signature, by the key `certificate_bytes`
@@ -359,6 +373,20 @@ impl Core {
     /// The groups this device is a member of.
     pub fn groups(&self) -> Result<JsValue, JsValue> {
         to_js(&dto::groups(&self.client.groups()))
+    }
+
+    /// The account key's revocation of another device of the account (story 03-05).
+    #[wasm_bindgen(js_name = revokeDevice)]
+    pub fn revoke_device(&self, device_id: &[u8]) -> Result<Vec<u8>, JsValue> {
+        let device = DeviceId::from_bytes(id16(device_id, "device id")?);
+        self.client.revoke_device(device).js()
+    }
+
+    /// The groups a device of the account is a member of: to remove it from, once revoked.
+    #[wasm_bindgen(js_name = groupsWith)]
+    pub fn groups_with(&self, device_id: &[u8]) -> Result<JsValue, JsValue> {
+        let device = DeviceId::from_bytes(id16(device_id, "device id")?);
+        to_js(&dto::groups(&self.client.groups_with(device)))
     }
 
     /// Certifies the device whose link QR code was scanned (story 03-04): its

@@ -1,6 +1,6 @@
 import type { CertifiedDevice, NewAccount } from './account.js'
 import type { ClaimedKeyPackage, StoredKeyPackage, VerifiedKeyPackage } from './keyPackages.js'
-import type { KnownDevice } from './session.js'
+import type { DeviceEntry, DeviceKind, KnownDevice } from './session.js'
 
 /** Checks a device certificate's signature: the core does, never this server's code. */
 export interface CertificateVerifier {
@@ -38,6 +38,15 @@ export interface Devices {
    * account's, and its identifier and key are new. Whether it was added.
    */
   add(accountId: string, device: CertifiedDevice): Promise<boolean>
+  /** Records a sign-in: the kind the device declares, and today as its last active day. */
+  signedIn(deviceId: Uint8Array, kind: DeviceKind): Promise<void>
+  /** The account's live devices, oldest first. */
+  list(accountId: string): Promise<DeviceEntry[]>
+}
+
+/** Checks a device revocation: the core does, with the account key the server keeps. */
+export interface RevocationVerifier {
+  verify(account: string, deviceId: Uint8Array, accountKey: Uint8Array, revocation: Uint8Array): boolean
 }
 
 /** The mailboxes of device links: one sealed grant per link, for a few minutes. */

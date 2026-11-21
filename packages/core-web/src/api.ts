@@ -133,6 +133,8 @@ export type Incoming =
       removedSelf: boolean
       /** Its messages that will never be sent. */
       unsent: Bytes[]
+      /** Devices of verified contacts among `removed`: tell the user (story 03-05). */
+      verifiedRemoved: DeviceInfo[]
     }
 
 export type Content =
@@ -201,6 +203,10 @@ export interface TesselCore {
   grantLink(qr: Bytes): Promise<LinkGrant>
   /** The groups this device is a member of. */
   groups(): Promise<Bytes[]>
+  /** On the device holding the account key: its signed revocation of another device of the account (story 03-05). */
+  revokeDevice(deviceId: Bytes): Promise<Bytes>
+  /** The groups a device of the account is in: to remove it from (`removeDevices`) once revoked. */
+  groupsWith(deviceId: Bytes): Promise<Bytes[]>
   /** Releases the core and the database. */
   close(): Promise<void>
 
@@ -255,6 +261,8 @@ export const METHODS = [
   'completeLink',
   'grantLink',
   'groups',
+  'revokeDevice',
+  'groupsWith',
   'close',
   'refreshKeyPackages',
   'verifyKeyPackage',

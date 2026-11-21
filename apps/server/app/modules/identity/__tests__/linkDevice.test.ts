@@ -59,7 +59,7 @@ async function database() {
 async function signedIn(client: ApiClient, device: ThrowawayDevice): Promise<TesselClient> {
   const anonymous = connect(client)
   const challenge = await anonymous.challenge()
-  const { token } = await anonymous.signIn(device.deviceId, challenge, device.signIn(challenge))
+  const { token } = await anonymous.signIn(device.deviceId, challenge, device.signIn(challenge), 'web')
   return connect(client, token)
 }
 

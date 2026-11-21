@@ -16,6 +16,7 @@ import {
   selfCheck,
   verifyCertificate as verify,
   verifyKeyPackage as verifyPackage,
+  verifyRevocation,
   verifySignIn,
 } from '../generated/tessel_wasm.js'
 
@@ -64,6 +65,20 @@ export function checkSignIn(certificate: Uint8Array, challenge: Uint8Array, proo
   }
 }
 
+/**
+ * Whether `revocation` is the signature, by `accountKey` (the one the server keeps for
+ * the account), revoking `deviceId` of `account` (story 03-05).
+ */
+export function checkRevocation(account: string, deviceId: Uint8Array, accountKey: Uint8Array, revocation: Uint8Array): boolean {
+  loadServerCore()
+  try {
+    verifyRevocation(account, deviceId, accountKey, revocation)
+    return true
+  } catch {
+    return false
+  }
+}
+
 /** A *KeyPackage*, as its signatures, suite and device certificate check out (story 03-03). */
 export interface CheckedKeyPackage {
   /** The device that made it. */
@@ -102,6 +117,8 @@ export interface ThrowawayDevice {
   refreshKeyPackages(now: number): KeyPackageBatch
   /** `TesselCore.grantLink`: on an account's first device, it certifies a scanned device. */
   grantLink(qr: Uint8Array): { link: Uint8Array<ArrayBuffer>; certificate: Uint8Array<ArrayBuffer>; grant: Uint8Array<ArrayBuffer> }
+  /** `TesselCore.revokeDevice`: on an account's first device, it revokes another one. */
+  revokeDevice(deviceId: Uint8Array): Uint8Array
   /** Drops its keys. */
   free(): void
 }
@@ -114,6 +131,7 @@ function throwaway(core: Core): ThrowawayDevice {
     signIn: (challenge) => core.signIn(challenge),
     refreshKeyPackages: (now) => core.refreshKeyPackages(now),
     grantLink: (qr) => core.grantLink(qr),
+    revokeDevice: (deviceId) => core.revokeDevice(deviceId),
     free: () => core.free(),
   }
 }

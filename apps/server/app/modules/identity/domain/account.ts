@@ -34,6 +34,8 @@ export type IdentityErrorCode =
   | 'stockFull'
   | 'tooManyDevices'
   | 'linkUsed'
+  | 'unknownDevice'
+  | 'invalidRevocation'
 
 export class IdentityError extends Error {
   readonly code: IdentityErrorCode

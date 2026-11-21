@@ -167,6 +167,14 @@ export class CoreHost implements TesselCore {
     return this.#call((core) => core.groups())
   }
 
+  revokeDevice(deviceId: Bytes): Promise<Bytes> {
+    return this.#call((core) => own(core.revokeDevice(deviceId)))
+  }
+
+  groupsWith(deviceId: Bytes): Promise<Bytes[]> {
+    return this.#call((core) => core.groupsWith(deviceId))
+  }
+
   /** The store key of a started profile without a device; refuses otherwise. */
   #awaitingDevice(method: string): Bytes {
     const key = this.#pendingKey

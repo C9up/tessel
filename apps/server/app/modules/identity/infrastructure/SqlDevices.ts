@@ -1,7 +1,7 @@
 import type { AsyncDatabaseConnection } from '@c9up/atlas'
 import type { CertifiedDevice } from '../domain/account.js'
 import type { Devices } from '../domain/ports.js'
-import type { KnownDevice } from '../domain/session.js'
+import { type DeviceEntry, type DeviceKind, isDeviceKind, type KnownDevice } from '../domain/session.js'
 
 const hex = (bytes: Uint8Array) => Buffer.from(bytes).toString('hex')
 
@@ -14,8 +14,9 @@ export class SqlDevices implements Devices {
   }
 
   async find(deviceId: Uint8Array): Promise<KnownDevice | null> {
-    const [row] = await this.#db.query<{ account_id: string; name: string; certificate: string; revoked: boolean }>(
-      `SELECT d.account_id::text AS account_id, a.name, encode(d.certificate, 'hex') AS certificate, d.revoked_on IS NOT NULL AS revoked
+    const [row] = await this.#db.query<{ account_id: string; name: string; certificate: string; account_key: string; revoked: boolean }>(
+      `SELECT d.account_id::text AS account_id, a.name, encode(d.certificate, 'hex') AS certificate,
+              encode(a.account_key, 'hex') AS account_key, d.revoked_on IS NOT NULL AS revoked
          FROM devices d JOIN accounts a ON a.id = d.account_id
         WHERE d.id = decode($1, 'hex')`,
       [hex(deviceId)],
@@ -26,8 +27,29 @@ export class SqlDevices implements Devices {
       accountId: row.account_id,
       name: row.name,
       certificate: new Uint8Array(Buffer.from(row.certificate, 'hex')),
+      accountKey: new Uint8Array(Buffer.from(row.account_key, 'hex')),
       revoked: row.revoked,
     }
+  }
+
+  async signedIn(deviceId: Uint8Array, kind: DeviceKind): Promise<void> {
+    await this.#db.execute(`UPDATE devices SET kind = $2, last_active_on = current_date WHERE id = decode($1, 'hex')`, [hex(deviceId), kind])
+  }
+
+  async list(accountId: string): Promise<DeviceEntry[]> {
+    const rows = await this.#db.query<{ id: string; kind: string | null; created_on: string; last_active_on: string | null }>(
+      `SELECT encode(id, 'hex') AS id, kind, to_char(created_on, 'YYYY-MM-DD') AS created_on,
+              to_char(last_active_on, 'YYYY-MM-DD') AS last_active_on
+         FROM devices WHERE account_id = $1::uuid AND revoked_on IS NULL
+        ORDER BY created_on, id`,
+      [accountId],
+    )
+    return rows.map((row) => ({
+      deviceId: new Uint8Array(Buffer.from(row.id, 'hex')),
+      kind: isDeviceKind(row.kind) ? row.kind : null,
+      createdOn: row.created_on,
+      lastActiveOn: row.last_active_on,
+    }))
   }
 
   async revoke(deviceId: Uint8Array): Promise<boolean> {

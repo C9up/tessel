@@ -9,6 +9,8 @@ import {
   type ClaimKeyPackagesParams,
   type CreateAccountParams,
   type DeviceLinked,
+  type DeviceList,
+  type DeviceRevoked,
   fromBase64Url,
   type KeyPackageStock,
   type LinkGrantTaken,
@@ -19,6 +21,7 @@ import {
   toBase64Url,
 } from '@tessel/protocol'
 import { RpcFailure } from '#modules/shared/http/rpc.js'
+import type { AccountDevices } from '../application/AccountDevices.js'
 import type { Authenticate } from '../application/Authenticate.js'
 import type { CreateAccount } from '../application/CreateAccount.js'
 import type { KeyPackageDirectory } from '../application/KeyPackageDirectory.js'
@@ -26,7 +29,7 @@ import type { LinkDevice } from '../application/LinkDevice.js'
 import type { SignIn } from '../application/SignIn.js'
 import { IdentityError } from '../domain/account.js'
 import { type KeyPackageUpload, LOW_STOCK, MAX_BATCH } from '../domain/keyPackages.js'
-import type { SignedInDevice } from '../domain/session.js'
+import { isDeviceKind, type SignedInDevice } from '../domain/session.js'
 
 type Handler = (ctx: HttpContext, params: unknown) => Promise<unknown>
 
@@ -64,6 +67,9 @@ export const LINKS = { requests: 10, duration: '1 hour' } as const
  * hopeless, this only bounds the work.
  */
 export const GRANT_POLLS = { requests: 60, duration: '1 minute' } as const
+
+/** Revocations by one device, per hour. */
+export const REVOCATIONS = { requests: 10, duration: '1 hour' } as const
 
 /** A sealed grant: a nonce, a certificate, a tag. Well under this. */
 const MAX_GRANT = 1024
@@ -118,6 +124,7 @@ const SignInValidator = schema<SignInParams>({
   device: rules.string().max(32).custom('base64url', base64url, 'not base64url'),
   challenge: rules.string().max(64).custom('base64url', base64url, 'not base64url'),
   proof: rules.string().max(128).custom('base64url', base64url, 'not base64url'),
+  kind: rules.string().custom('kind', isDeviceKind, 'web, android or ios'),
 })
 
 function refused(error: unknown): never {
@@ -130,6 +137,8 @@ function refused(error: unknown): never {
     if (error.code === 'stockFull') throw new RpcFailure('E_IDENTITY_KEY_PACKAGE_STOCK_FULL')
     if (error.code === 'tooManyDevices') throw new RpcFailure('E_IDENTITY_TOO_MANY_DEVICES')
     if (error.code === 'linkUsed') throw new RpcFailure('E_IDENTITY_LINK_USED')
+    if (error.code === 'unknownDevice') throw new RpcFailure('E_IDENTITY_UNKNOWN_DEVICE')
+    if (error.code === 'invalidRevocation') throw new RpcFailure('E_IDENTITY_INVALID_REVOCATION')
     throw new RpcFailure('E_IDENTITY_INVALID_CERTIFICATE')
   }
   if (error instanceof ThrottleException) throw new RpcFailure('E_TOO_MANY_REQUESTS', { retryIn: error.response.availableIn })
@@ -149,6 +158,7 @@ export interface IdentityDeps {
   authenticate: () => Promise<Authenticate>
   directory: () => Promise<KeyPackageDirectory>
   link: () => Promise<LinkDevice>
+  devices: () => Promise<AccountDevices>
 }
 
 /**
@@ -182,7 +192,9 @@ export function identityMethods(
   | 'keyPackageStock'
   | 'claimKeyPackages'
   | 'linkDevice'
-  | 'takeLinkGrant',
+  | 'takeLinkGrant'
+  | 'devices'
+  | 'revokeDevice',
   Handler
 > {
   const guard = sessionGuard(deps)
@@ -219,7 +231,9 @@ export function identityMethods(
         const challenge = fromBase64Url(parsed.data.challenge)
         const proof = fromBase64Url(parsed.data.proof)
         if (deviceId?.length !== 16 || challenge?.length !== 32 || proof?.length !== 64) throw new RpcFailure('E_INVALID_PARAMS')
-        const token = await (await deps.signIn()).run({ deviceId, challenge, proof })
+        const kind = parsed.data.kind
+        if (!isDeviceKind(kind)) throw new RpcFailure('E_INVALID_PARAMS')
+        const token = await (await deps.signIn()).run({ deviceId, challenge, proof, kind })
         return { token } satisfies SignedIn
       } catch (error) {
         refused(error)
@@ -296,6 +310,36 @@ export function identityMethods(
         if (link?.length !== 16) throw new RpcFailure('E_INVALID_PARAMS')
         const grant = await (await deps.link()).takeGrant(link)
         return (grant === null ? {} : { grant: toBase64Url(grant) }) satisfies LinkGrantTaken
+      } catch (error) {
+        refused(error)
+      }
+    },
+
+    devices: async (ctx) => {
+      const device = await guard(ctx)
+      const current = deviceKey(device)
+      const devices = await (await deps.devices()).list(device)
+      return {
+        devices: devices.map((entry) => ({
+          device: toBase64Url(entry.deviceId),
+          createdOn: entry.createdOn,
+          current: Buffer.from(entry.deviceId).toString('hex') === current,
+          ...(entry.kind === null ? {} : { kind: entry.kind }),
+          ...(entry.lastActiveOn === null ? {} : { lastActiveOn: entry.lastActiveOn }),
+        })),
+      } satisfies DeviceList
+    },
+
+    revokeDevice: async (ctx, params) => {
+      const device = await guard(ctx)
+      try {
+        await limiter.use(REVOCATIONS).consume(`identity_revoke_${deviceKey(device)}`)
+        if (!isRecord(params)) throw new RpcFailure('E_INVALID_PARAMS')
+        const target = decoded(params.device, 16)
+        const revocation = params.revocation === undefined ? undefined : decoded(params.revocation, 64)
+        if (target?.length !== 16 || (params.revocation !== undefined && revocation === undefined)) throw new RpcFailure('E_INVALID_PARAMS')
+        await (await deps.devices()).revoke(device, target, revocation)
+        return { revoked: true } satisfies DeviceRevoked
       } catch (error) {
         refused(error)
       }

@@ -274,6 +274,10 @@ pub enum Incoming {
         /// When this device was removed, its messages still queued for the group: they
         /// will never be sent (story 02-07).
         unsent: Vec<MessageId>,
+        /// Devices of verified contacts among `removed` (story 03-05): the user is to be
+        /// told. They leave the verified devices, so that one coming back is reported as
+        /// new ([`crate::Trust::NewDevice`]).
+        verified_removed: Vec<DeviceCertificate>,
     },
 }
 
@@ -696,6 +700,7 @@ impl Client {
                 } else {
                     Vec::new()
                 };
+                let verified_removed = self.forget_verified_devices(&removed)?;
                 Ok(Incoming::Commit {
                     group: id,
                     sender,
@@ -703,6 +708,7 @@ impl Client {
                     removed,
                     removed_self,
                     unsent,
+                    verified_removed,
                 })
             }
             // Our own commit sent back by the server: it accepted it. (Only as a
@@ -723,6 +729,8 @@ impl Client {
                     removed,
                     removed_self: false,
                     unsent: Vec::new(),
+                    // This device made the commit: nothing to warn its own user about.
+                    verified_removed: Vec::new(),
                 })
             }
             ProcessedMessageContent::OwnPrivateMessage => Err(GroupError::OwnMessage),

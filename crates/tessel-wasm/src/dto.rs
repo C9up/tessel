@@ -450,6 +450,7 @@ pub(crate) enum IncomingDto {
         removed: Vec<DeviceInfo>,
         removed_self: bool,
         unsent: Vec<ByteBuf>,
+        verified_removed: Vec<DeviceInfo>,
     },
 }
 
@@ -487,6 +488,7 @@ impl IncomingDto {
                 removed,
                 removed_self,
                 unsent,
+                verified_removed,
             } => Self::Commit {
                 group: bytes(group.as_bytes()),
                 sender: DeviceInfo::of(&sender)?,
@@ -494,6 +496,7 @@ impl IncomingDto {
                 removed: DeviceInfo::all(&removed)?,
                 removed_self,
                 unsent: ids(&unsent),
+                verified_removed: DeviceInfo::all(&verified_removed)?,
             },
         })
     }

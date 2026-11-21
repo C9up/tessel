@@ -51,8 +51,18 @@ class SqlSessionStore implements AccessTokenStore {
   }
 
   async touch(identifier: string): Promise<void> {
-    // Once a day at most: the day is all the server keeps.
-    await this.#db.execute('UPDATE sessions SET last_used_on = current_date WHERE id = $1 AND last_used_on IS DISTINCT FROM current_date', [identifier])
+    // Once a day at most: the day is all the server keeps. The device's last active day
+    // (story 03-05) moves with it.
+    await this.#db.execute(
+      `WITH used AS (
+         UPDATE sessions SET last_used_on = current_date
+          WHERE id = $1 AND last_used_on IS DISTINCT FROM current_date
+         RETURNING device_id
+       )
+       UPDATE devices SET last_active_on = current_date
+        WHERE id IN (SELECT device_id FROM used) AND last_active_on IS DISTINCT FROM current_date`,
+      [identifier],
+    )
   }
 
   async delete(identifier: string): Promise<boolean> {

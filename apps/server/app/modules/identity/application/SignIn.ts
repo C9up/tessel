@@ -31,6 +31,7 @@ export class SignIn {
     const device = await this.#devices.find(attempt.deviceId)
     if (device === null || device.revoked) throw new IdentityError('signInRefused')
     if (!this.#verifier.verify(device.certificate, attempt.challenge, attempt.proof)) throw new IdentityError('signInRefused')
+    await this.#devices.signedIn(device.deviceId, attempt.kind)
     return this.#sessions.open(device.deviceId)
   }
 }

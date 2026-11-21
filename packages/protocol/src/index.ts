@@ -25,6 +25,8 @@ export const Method = {
   claimKeyPackages: 'identity.claimKeyPackages',
   linkDevice: 'identity.linkDevice',
   takeLinkGrant: 'identity.takeLinkGrant',
+  devices: 'identity.devices',
+  revokeDevice: 'identity.revokeDevice',
 } as const
 
 /**
@@ -59,6 +61,10 @@ export const ServerError = {
   E_IDENTITY_TOO_MANY_DEVICES: -32011,
   /** The link already holds a grant: the new device shows a new QR code. */
   E_IDENTITY_LINK_USED: -32012,
+  /** No live device of the caller's account has that identifier. */
+  E_IDENTITY_UNKNOWN_DEVICE: -32013,
+  /** Revoking another device takes the account key's signature, and this one does not verify. */
+  E_IDENTITY_INVALID_REVOCATION: -32602,
   /** Too many calls from this network: wait, then try again. */
   E_TOO_MANY_REQUESTS: -32029,
 } as const
@@ -105,6 +111,43 @@ export interface SignInParams {
   readonly challenge: string
   /** base64url. */
   readonly proof: string
+  /** What the device is, for its account's device list. */
+  readonly kind: DeviceKind
+}
+
+/** What a device is: the server learns it anyway from the push service it registers with. */
+export type DeviceKind = 'web' | 'android' | 'ios'
+
+/** A live device of the account, as `identity.devices` lists it. */
+export interface DeviceEntry {
+  /** base64url of the device identifier. */
+  readonly device: string
+  /** Absent until it signs in once. */
+  readonly kind?: DeviceKind
+  /** `YYYY-MM-DD`: the day only. */
+  readonly createdOn: string
+  /** `YYYY-MM-DD`: the day only; absent until it signs in once. */
+  readonly lastActiveOn?: string
+  /** The device asking. */
+  readonly current: boolean
+}
+
+/** Response of `identity.devices`. */
+export interface DeviceList {
+  readonly devices: readonly DeviceEntry[]
+}
+
+/** Parameters of `identity.revokeDevice`. */
+export interface RevokeDeviceParams {
+  /** base64url of the device identifier. */
+  readonly device: string
+  /** base64url of `TesselCore.revokeDevice`; not needed for the calling device itself. */
+  readonly revocation?: string
+}
+
+/** Response of `identity.revokeDevice`. */
+export interface DeviceRevoked {
+  readonly revoked: true
 }
 
 /** Response of `identity.signIn`. */
@@ -260,6 +303,35 @@ export function parseClaimedKeyPackages(data: unknown): ClaimedKeyPackages {
   throw new ProtocolError('E_PROTOCOL_BAD_RESULT', Method.claimKeyPackages)
 }
 
+const isDeviceKind = (value: unknown): value is DeviceKind => value === 'web' || value === 'android' || value === 'ios'
+const isDay = (value: unknown): value is string => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)
+
+function deviceEntry(data: unknown): DeviceEntry | undefined {
+  if (!isRecord(data) || typeof data.device !== 'string' || !isDay(data.createdOn) || typeof data.current !== 'boolean') return undefined
+  if (data.kind !== undefined && !isDeviceKind(data.kind)) return undefined
+  if (data.lastActiveOn !== undefined && !isDay(data.lastActiveOn)) return undefined
+  return {
+    device: data.device,
+    createdOn: data.createdOn,
+    current: data.current,
+    ...(isDeviceKind(data.kind) ? { kind: data.kind } : {}),
+    ...(isDay(data.lastActiveOn) ? { lastActiveOn: data.lastActiveOn } : {}),
+  }
+}
+
+export function parseDeviceList(data: unknown): DeviceList {
+  if (isRecord(data) && Array.isArray(data.devices)) {
+    const devices = data.devices.map(deviceEntry).filter((entry) => entry !== undefined)
+    if (devices.length === data.devices.length) return { devices }
+  }
+  throw new ProtocolError('E_PROTOCOL_BAD_RESULT', Method.devices)
+}
+
+export function parseDeviceRevoked(data: unknown): DeviceRevoked {
+  if (isRecord(data) && data.revoked === true) return { revoked: true }
+  throw new ProtocolError('E_PROTOCOL_BAD_RESULT', Method.revokeDevice)
+}
+
 export function parseDeviceLinked(data: unknown): DeviceLinked {
   if (isRecord(data) && data.linked === true) return { linked: true }
   throw new ProtocolError('E_PROTOCOL_BAD_RESULT', Method.linkDevice)
@@ -286,7 +358,7 @@ export interface TesselClient {
   /** A fresh sign-in challenge, as bytes, for `TesselCore.signIn`. */
   challenge(signal?: AbortSignal): Promise<Uint8Array<ArrayBuffer>>
   /** Opens a session for `device`, with its signature of `challenge`. */
-  signIn(device: Uint8Array, challenge: Uint8Array, proof: Uint8Array, signal?: AbortSignal): Promise<SignedIn>
+  signIn(device: Uint8Array, challenge: Uint8Array, proof: Uint8Array, kind: DeviceKind, signal?: AbortSignal): Promise<SignedIn>
   /** Who the transport's session is. */
   session(signal?: AbortSignal): Promise<Session>
   /** Closes the transport's session. */
@@ -301,6 +373,10 @@ export interface TesselClient {
   linkDevice(certificate: Uint8Array, link: Uint8Array, grant: Uint8Array, signal?: AbortSignal): Promise<DeviceLinked>
   /** On the new device, without a session: its grant, once; `undefined` while it has not come. */
   takeLinkGrant(link: Uint8Array, signal?: AbortSignal): Promise<Uint8Array<ArrayBuffer> | undefined>
+  /** The account's live devices. */
+  devices(signal?: AbortSignal): Promise<DeviceList>
+  /** Revokes a device of the account: itself without `revocation`, another one with `TesselCore.revokeDevice`. */
+  revokeDevice(device: Uint8Array, revocation?: Uint8Array, signal?: AbortSignal): Promise<DeviceRevoked>
 }
 
 export function createTesselClient(transport: RpcTransport, url = '/rpc'): TesselClient {
@@ -314,8 +390,8 @@ export function createTesselClient(transport: RpcTransport, url = '/rpc'): Tesse
       // parseChallenge checked that it decodes.
       return fromBase64Url(challenge) ?? new Uint8Array()
     },
-    signIn: (device, challenge, proof, signal) =>
-      rpc.call(Method.signIn, { device: toBase64Url(device), challenge: toBase64Url(challenge), proof: toBase64Url(proof) } satisfies SignInParams, {
+    signIn: (device, challenge, proof, kind, signal) =>
+      rpc.call(Method.signIn, { device: toBase64Url(device), challenge: toBase64Url(challenge), proof: toBase64Url(proof), kind } satisfies SignInParams, {
         parse: parseSignedIn,
         signal,
       }),
@@ -337,6 +413,12 @@ export function createTesselClient(transport: RpcTransport, url = '/rpc'): Tesse
         parse: parseDeviceLinked,
         signal,
       }),
+    devices: (signal) => rpc.call(Method.devices, {}, { parse: parseDeviceList, signal }),
+    revokeDevice: (device, revocation, signal) => {
+      const params: RevokeDeviceParams =
+        revocation === undefined ? { device: toBase64Url(device) } : { device: toBase64Url(device), revocation: toBase64Url(revocation) }
+      return rpc.call(Method.revokeDevice, params, { parse: parseDeviceRevoked, signal })
+    },
     takeLinkGrant: async (link, signal) => {
       const { grant } = await rpc.call(Method.takeLinkGrant, { link: toBase64Url(link) } satisfies TakeLinkGrantParams, { parse: parseLinkGrantTaken, signal })
       return grant === undefined ? undefined : fromBase64Url(grant)

@@ -70,7 +70,7 @@ async function register(tessel: TesselClient, prefix: string): Promise<Throwaway
 /** What the app does: draw a challenge, sign it, open a session. */
 async function signIn(tessel: TesselClient, device: ThrowawayDevice): Promise<string> {
   const challenge = await tessel.challenge()
-  return (await tessel.signIn(device.deviceId, challenge, device.signIn(challenge))).token
+  return (await tessel.signIn(device.deviceId, challenge, device.signIn(challenge), 'web')).token
 }
 
 describe('signing in with the device key', () => {
@@ -107,17 +107,17 @@ describe('signing in with the device key', () => {
 
     const challenge = await tessel.challenge()
     const proof = alice.signIn(challenge)
-    await tessel.signIn(alice.deviceId, challenge, proof)
+    await tessel.signIn(alice.deviceId, challenge, proof, 'web')
     // Replayed: the challenge is spent.
-    expect(await failure(tessel.signIn(alice.deviceId, challenge, proof))).toEqual(REFUSED)
+    expect(await failure(tessel.signIn(alice.deviceId, challenge, proof, 'web'))).toEqual(REFUSED)
 
     // Bob's proof for Alice's device, a challenge the server never drew, a device it does not know.
     const fresh = await tessel.challenge()
-    expect(await failure(tessel.signIn(alice.deviceId, fresh, bob.signIn(fresh)))).toEqual(REFUSED)
+    expect(await failure(tessel.signIn(alice.deviceId, fresh, bob.signIn(fresh), 'web'))).toEqual(REFUSED)
     const invented = crypto.getRandomValues(new Uint8Array(32))
-    expect(await failure(tessel.signIn(alice.deviceId, invented, alice.signIn(invented)))).toEqual(REFUSED)
+    expect(await failure(tessel.signIn(alice.deviceId, invented, alice.signIn(invented), 'web'))).toEqual(REFUSED)
     const another = await tessel.challenge()
-    expect(await failure(tessel.signIn(crypto.getRandomValues(new Uint8Array(16)), another, alice.signIn(another)))).toEqual(REFUSED)
+    expect(await failure(tessel.signIn(crypto.getRandomValues(new Uint8Array(16)), another, alice.signIn(another), 'web'))).toEqual(REFUSED)
   })
 
   test('no session, or a forged one, is refused', async ({ client }) => {
@@ -150,7 +150,7 @@ describe('signing in with the device key', () => {
     ])
     expect(row?.sessions).toBe('0')
     const challenge = await tessel.challenge()
-    expect(await failure(tessel.signIn(device.deviceId, challenge, device.signIn(challenge)))).toEqual(REFUSED)
+    expect(await failure(tessel.signIn(device.deviceId, challenge, device.signIn(challenge), 'web'))).toEqual(REFUSED)
   })
 
   test('one network signs in a few times a minute, no more', async ({ client }) => {
@@ -158,7 +158,7 @@ describe('signing in with the device key', () => {
     const device = await register(tessel, 'eve')
     for (let i = 0; i < SIGN_INS.requests; i++) await signIn(tessel, device)
     const challenge = await tessel.challenge()
-    const over = await failure(tessel.signIn(device.deviceId, challenge, device.signIn(challenge)))
+    const over = await failure(tessel.signIn(device.deviceId, challenge, device.signIn(challenge), 'web'))
     expect(over.message).toBe('E_TOO_MANY_REQUESTS')
   })
 })

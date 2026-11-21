@@ -25,6 +25,7 @@ use openmls_traits::types::HashType;
 use zeroize::Zeroizing;
 
 use crate::client::Client;
+use crate::groups::GroupId;
 use crate::identity::{Device, DeviceCertificate, DeviceId, DeviceKey, IdentityError};
 use crate::store::{StoreError, StoreKey};
 
@@ -213,6 +214,29 @@ fn open(key: &[u8; 32], link: &[u8; LINK_ID_LEN], sealed: &[u8]) -> Result<Vec<u
 }
 
 impl Client {
+    /// The account key's revocation of another device of this account (story 03-05),
+    /// for the server: only the device holding the account key can sign it. A device
+    /// revokes itself without one.
+    pub fn revoke_device(&self, device: DeviceId) -> Result<Vec<u8>, LinkError> {
+        let account_key = self.account_key().ok_or(LinkError::NoAccountKey)?;
+        Ok(account_key.revoke(self.device.certificate().account(), device)?)
+    }
+
+    /// The groups `device` is a member of: those to remove it from once revoked.
+    pub fn groups_with(&self, device: DeviceId) -> Vec<GroupId> {
+        let account = self.device.certificate().account();
+        self.groups()
+            .into_iter()
+            .filter(|group| {
+                self.members(group).is_ok_and(|members| {
+                    members
+                        .iter()
+                        .any(|m| m.account() == account && m.device_id() == device)
+                })
+            })
+            .collect()
+    }
+
     /// Certifies the device whose QR code was scanned, as a device of this account, and
     /// seals its certificate for it. Only the device holding the account key can.
     pub fn grant_link(&self, qr: &[u8]) -> Result<LinkGrant, LinkError> {

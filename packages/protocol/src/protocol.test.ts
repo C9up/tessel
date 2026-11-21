@@ -9,6 +9,8 @@ import {
   parseChallenge,
   parseClaimedKeyPackages,
   parseDeviceLinked,
+  parseDeviceList,
+  parseDeviceRevoked,
   parseKeyPackageStock,
   parseLinkGrantTaken,
   parsePong,
@@ -102,4 +104,17 @@ test('device link answers are checked', () => {
   assert.deepEqual(parseLinkGrantTaken({ grant: 'AAAA' }), { grant: 'AAAA' })
   assert.throws(() => parseLinkGrantTaken({ grant: 'not base64!' }), ProtocolError)
   assert.throws(() => parseLinkGrantTaken(null), ProtocolError)
+})
+
+test('device list answers are checked', () => {
+  const entry = { device: 'AAAA', kind: 'web', createdOn: '2026-11-21', lastActiveOn: '2026-11-21', current: true }
+  assert.deepEqual(parseDeviceList({ devices: [entry] }), { devices: [entry] })
+  assert.deepEqual(parseDeviceList({ devices: [{ device: 'AAAA', createdOn: '2026-11-21', current: false }] }), {
+    devices: [{ device: 'AAAA', createdOn: '2026-11-21', current: false }],
+  })
+  // An hour is more than the server keeps: refused.
+  assert.throws(() => parseDeviceList({ devices: [{ ...entry, lastActiveOn: '2026-11-21T10:00:00Z' }] }), ProtocolError)
+  assert.throws(() => parseDeviceList({ devices: [{ ...entry, kind: 'toaster' }] }), ProtocolError)
+  assert.deepEqual(parseDeviceRevoked({ revoked: true }), { revoked: true })
+  assert.throws(() => parseDeviceRevoked({}), ProtocolError)
 })

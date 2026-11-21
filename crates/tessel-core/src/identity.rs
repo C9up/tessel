@@ -51,6 +51,60 @@ const SIGN_IN_VERSION: u8 = 1;
 /// Size of a sign-in challenge: 256 random bits drawn by the server.
 pub const CHALLENGE_LEN: usize = 32;
 
+/// Signature label of a device revocation (story 03-05).
+const REVOCATION_LABEL: &[u8] = b"Tessel 1.0 DeviceRevocation";
+
+/// Device revocation format version.
+const REVOCATION_VERSION: u8 = 1;
+
+/// What the account key signs to revoke one of its devices: anyone who knows the account
+/// key checks it, the server first. A device identifier is never reused, so a revocation
+/// replayed revokes nothing new.
+#[derive(TlsSerialize, TlsSize)]
+struct RevocationContent {
+    version: u8,
+    account: TlsByteVecU16,
+    device_id: [u8; 16],
+}
+
+fn revocation_to_be_signed(
+    account: &AccountId,
+    device: DeviceId,
+) -> Result<Vec<u8>, IdentityError> {
+    let content = RevocationContent {
+        version: REVOCATION_VERSION,
+        account: account.to_string().into_bytes().into(),
+        device_id: device.0,
+    }
+    .tls_serialize_detached()
+    .map_err(|_| IdentityError::Crypto)?;
+    SignContent {
+        label: VLByteSlice(REVOCATION_LABEL),
+        content: VLByteSlice(&content),
+    }
+    .tls_serialize_detached()
+    .map_err(|_| IdentityError::Crypto)
+}
+
+/// Checks that `signature` is the account key's revocation of `device` of `account`.
+/// `account_key` is the one the caller knows for the account, never one the statement
+/// would bring.
+pub fn verify_revocation(
+    account: &AccountId,
+    device: DeviceId,
+    account_key: &[u8],
+    signature: &[u8],
+) -> Result<(), IdentityError> {
+    RustCrypto::default()
+        .verify_signature(
+            SCHEME,
+            &revocation_to_be_signed(account, device)?,
+            account_key,
+            signature,
+        )
+        .map_err(|_| IdentityError::BadSignature)
+}
+
 /// Size of an Ed25519 public key.
 const PUBLIC_KEY_LEN: usize = 32;
 
@@ -282,6 +336,12 @@ impl AccountKey {
         let signature = self.0.sign(&certificate.to_be_signed()?)?;
         certificate.signature = signature.try_into().map_err(|_| IdentityError::Crypto)?;
         Ok(certificate)
+    }
+
+    /// Revokes `device` of `account` (story 03-05): the statement the server and the
+    /// contacts check with [`verify_revocation`].
+    pub fn revoke(&self, account: &AccountId, device: DeviceId) -> Result<Vec<u8>, IdentityError> {
+        self.0.sign(&revocation_to_be_signed(account, device)?)
     }
 
     /// Writes the key, private half included, into the client record. Only the store

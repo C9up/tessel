@@ -47,3 +47,19 @@ export class DeviceAdded extends DomainEvent {
     this.deviceId = deviceId
   }
 }
+
+/**
+ * `identity.device.revoked`: a device was revoked (story 03-05); its sessions and its
+ * KeyPackages are gone. Opaque identifiers only.
+ */
+export class DeviceRevoked extends DomainEvent {
+  readonly type = 'identity.device.revoked'
+  readonly accountId: string
+  readonly deviceId: string
+
+  constructor(accountId: string, deviceId: string) {
+    super()
+    this.accountId = accountId
+    this.deviceId = deviceId
+  }
+}

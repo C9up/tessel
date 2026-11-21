@@ -247,3 +247,40 @@ fn a_challenge_of_the_wrong_size_is_refused() {
         Err(IdentityError::MalformedChallenge)
     );
 }
+
+#[test]
+fn a_revocation_verifies_with_the_account_key_for_its_device_only() {
+    let account_key = AccountKey::generate().unwrap();
+    let device = DeviceId::random().unwrap();
+    let revocation = account_key.revoke(&alice(), device).unwrap();
+    verify_revocation(&alice(), device, account_key.public_key(), &revocation).unwrap();
+
+    // Another device, another account, another key: it proves nothing.
+    let bad = Err(IdentityError::BadSignature);
+    assert_eq!(
+        verify_revocation(
+            &alice(),
+            DeviceId::random().unwrap(),
+            account_key.public_key(),
+            &revocation
+        ),
+        bad
+    );
+    let bob = AccountId::parse("bob@tessel.example").unwrap();
+    assert_eq!(
+        verify_revocation(&bob, device, account_key.public_key(), &revocation),
+        bad
+    );
+    let other = AccountKey::generate().unwrap();
+    assert_eq!(
+        verify_revocation(&alice(), device, other.public_key(), &revocation),
+        bad
+    );
+    // A sign-in proof or a certificate signature is no revocation.
+    let signed_in = Device::create(&alice(), &account_key).unwrap();
+    let proof = signed_in.sign_in(&[0; CHALLENGE_LEN]).unwrap();
+    assert_eq!(
+        verify_revocation(&alice(), device, account_key.public_key(), &proof),
+        bad
+    );
+}

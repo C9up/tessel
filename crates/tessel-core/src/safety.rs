@@ -303,6 +303,28 @@ impl Client {
         self.contacts.trust(device)
     }
 
+    /// Among devices a commit removed, those of verified contacts that were vouched for:
+    /// they leave their account's verified devices (story 03-05).
+    pub(crate) fn forget_verified_devices(
+        &mut self,
+        removed: &[DeviceCertificate],
+    ) -> Result<Vec<DeviceCertificate>, StoreError> {
+        let mut forgotten = Vec::new();
+        for device in removed {
+            if self.contacts.trust(device) != Trust::Verified {
+                continue;
+            }
+            let Some(mut verified) = self.contacts.verified.get(device.account()).cloned() else {
+                continue;
+            };
+            verified.devices.retain(|id| *id != device.device_id());
+            let (contacts, sealer, state) = self.contacts_mut();
+            contacts.put(sealer, state, device.account().clone(), verified)?;
+            forgotten.push(device.clone());
+        }
+        Ok(forgotten)
+    }
+
     /// The user saw that a verified contact added a device: it is no longer reported.
     /// Refused when the account key changed: the contact has to be verified again.
     pub fn acknowledge_device(&mut self, device: &DeviceCertificate) -> Result<(), SafetyError> {

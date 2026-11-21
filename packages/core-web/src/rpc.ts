@@ -147,6 +147,12 @@ export class RemoteCore implements TesselCore {
   groups() {
     return this.#call('groups', [])
   }
+  revokeDevice(deviceId: Bytes) {
+    return this.#call('revokeDevice', [deviceId])
+  }
+  groupsWith(deviceId: Bytes) {
+    return this.#call('groupsWith', [deviceId])
+  }
   close() {
     return this.#call('close', [])
   }
