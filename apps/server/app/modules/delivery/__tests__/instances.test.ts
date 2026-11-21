@@ -1,13 +1,13 @@
 import { type ChildProcess, spawn } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { createNapiConnection } from '@c9up/atlas'
-import limiter from '@c9up/blackhole/services/limiter'
 import { DateTime } from '@c9up/chronos'
 import { afterAll, beforeEach, describe, expect, test } from '@c9up/helix'
 import { type ThrowawayDevice, throwawayDevice } from '@tessel/core-web/server'
 import { createTesselClient, fetchTransport, fromBase64Url, type TesselClient } from '@tessel/protocol'
 import { Inbox, listen } from '@tessel/protocol/realtime'
 import databaseConfig from '#config/database.js'
+import { clearLimits } from '#modules/shared/__tests__/limits.js'
 import env from '#start/env.js'
 
 /**
@@ -92,7 +92,7 @@ async function member(client: ApiClient, prefix: string): Promise<Member> {
 }
 
 describe('several instances of the server', () => {
-  beforeEach(() => limiter.clear())
+  beforeEach(() => clearLimits())
 
   afterAll(async () => {
     other?.kill('SIGTERM')

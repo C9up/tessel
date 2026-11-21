@@ -1,4 +1,12 @@
-import { DeliveryError, MAX_ENVELOPE, MAX_RECIPIENTS, type OutgoingEnvelope, type Placed, type StoredEnvelope } from '../domain/envelope.js'
+import {
+  DeliveryError,
+  ENVELOPE_LIMITS,
+  type EnvelopeLimits,
+  MAX_RECIPIENTS,
+  type OutgoingEnvelope,
+  type Placed,
+  type StoredEnvelope,
+} from '../domain/envelope.js'
 import type { Doorbell, EnvelopeReader, Mailboxes } from '../domain/ports.js'
 
 const hex = (bytes: Uint8Array) => Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('')
@@ -14,18 +22,23 @@ export class Mailbox {
   readonly #reader: EnvelopeReader
   readonly #mailboxes: Mailboxes
   readonly #doorbell: Doorbell
+  readonly #limits: EnvelopeLimits
 
-  constructor(reader: EnvelopeReader, mailboxes: Mailboxes, doorbell: Doorbell) {
+  constructor(reader: EnvelopeReader, mailboxes: Mailboxes, doorbell: Doorbell, limits: EnvelopeLimits = ENVELOPE_LIMITS) {
     this.#reader = reader
     this.#mailboxes = mailboxes
     this.#doorbell = doorbell
+    this.#limits = limits
   }
 
   /** Keeps `envelope` from `sender` for its recipients; its identifier. */
   async send(sender: Uint8Array, envelope: OutgoingEnvelope): Promise<Placed> {
-    if (envelope.body.length === 0 || envelope.body.length > MAX_ENVELOPE) throw new DeliveryError('invalidEnvelope')
+    if (envelope.body.length === 0) throw new DeliveryError('invalidEnvelope')
+    // Nothing larger than the largest kind is even parsed; then each kind its own size.
+    if (envelope.body.length > Math.max(...Object.values(this.#limits))) throw new DeliveryError('tooLarge')
     const header = this.#reader.read(envelope.body)
     if (header === null) throw new DeliveryError('invalidEnvelope')
+    if (envelope.body.length > this.#limits[header.kind]) throw new DeliveryError('tooLarge')
     // Each device once, and never the sender itself.
     const own = hex(sender)
     const recipients = [...new Map(envelope.recipients.map((device) => [hex(device), device])).entries()]

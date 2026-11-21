@@ -1,11 +1,11 @@
 import { createNapiConnection } from '@c9up/atlas'
-import limiter from '@c9up/blackhole/services/limiter'
 import { afterAll, beforeEach, describe, expect, test } from '@c9up/helix'
 import { type ThrowawayDevice, throwawayDevice } from '@tessel/core-web/server'
 import { createTesselClient, type TesselClient, toBase64Url } from '@tessel/protocol'
 import databaseConfig from '#config/database.js'
 import { SIGN_INS } from '#modules/identity/http/identityMethods.js'
 import { SqlDevices } from '#modules/identity/infrastructure/SqlDevices.js'
+import { clearLimits } from '#modules/shared/__tests__/limits.js'
 import env from '#start/env.js'
 
 /**
@@ -74,7 +74,7 @@ async function signIn(tessel: TesselClient, device: ThrowawayDevice): Promise<st
 }
 
 describe('signing in with the device key', () => {
-  beforeEach(() => limiter.clear())
+  beforeEach(() => clearLimits())
 
   afterAll(async () => {
     for (const device of devices.splice(0)) device.free()

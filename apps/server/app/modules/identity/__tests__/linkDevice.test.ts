@@ -1,5 +1,4 @@
 import { createNapiConnection } from '@c9up/atlas'
-import limiter from '@c9up/blackhole/services/limiter'
 import { DateTime } from '@c9up/chronos'
 import { afterAll, beforeEach, describe, expect, test } from '@c9up/helix'
 import emitter from '@c9up/ream/events/services/main'
@@ -8,6 +7,7 @@ import { createTesselClient, type TesselClient, toBase64Url } from '@tessel/prot
 import databaseConfig from '#config/database.js'
 import { MAX_DEVICES } from '#modules/identity/application/LinkDevice.js'
 import { DeviceAdded } from '#modules/identity/domain/events.js'
+import { clearLimits } from '#modules/shared/__tests__/limits.js'
 import env from '#start/env.js'
 
 /**
@@ -75,7 +75,7 @@ async function member(client: ApiClient, prefix: string) {
 }
 
 describe('adding a device by QR code', () => {
-  beforeEach(() => limiter.clear())
+  beforeEach(() => clearLimits())
 
   afterAll(async () => {
     for (const device of devices.splice(0)) device.free()

@@ -1,11 +1,11 @@
 import { createNapiConnection } from '@c9up/atlas'
-import limiter from '@c9up/blackhole/services/limiter'
 import { afterAll, beforeEach, describe, expect, test } from '@c9up/helix'
 import emitter from '@c9up/ream/events/services/main'
 import { type ThrowawayDevice, throwawayDevice, throwawayLink } from '@tessel/core-web/server'
 import { createTesselClient, type TesselClient } from '@tessel/protocol'
 import databaseConfig from '#config/database.js'
 import { ProfileUpdated } from '#modules/identity/domain/events.js'
+import { clearLimits } from '#modules/shared/__tests__/limits.js'
 import env from '#start/env.js'
 
 /**
@@ -70,7 +70,7 @@ async function member(client: ApiClient, prefix: string) {
 }
 
 describe('encrypted profiles', () => {
-  beforeEach(() => limiter.clear())
+  beforeEach(() => clearLimits())
 
   afterAll(async () => {
     for (const device of devices.splice(0)) device.free()

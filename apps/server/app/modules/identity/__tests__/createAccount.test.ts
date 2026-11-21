@@ -1,11 +1,11 @@
 import { createNapiConnection } from '@c9up/atlas'
-import limiter from '@c9up/blackhole/services/limiter'
 import { afterAll, beforeEach, describe, expect, test } from '@c9up/helix'
 import emitter from '@c9up/ream/events/services/main'
 import { throwawayCertificate } from '@tessel/core-web/server'
 import { createTesselClient, type TesselClient } from '@tessel/protocol'
 import databaseConfig from '#config/database.js'
 import { AccountCreated } from '#modules/identity/domain/events.js'
+import { clearLimits } from '#modules/shared/__tests__/limits.js'
 import env from '#start/env.js'
 
 /**
@@ -48,7 +48,7 @@ async function database() {
 }
 
 describe('creating an account', () => {
-  beforeEach(() => limiter.clear())
+  beforeEach(() => clearLimits())
 
   afterAll(async () => {
     if (created.length > 0)

@@ -86,6 +86,8 @@ export const ServerError = {
    * encrypts it anew).
    */
   E_DELIVERY_STALE_EPOCH: -32014,
+  /** The envelope is larger than its kind allows; `data.limits` gives each kind's size, in bytes. */
+  E_DELIVERY_TOO_LARGE: -32015,
   /** Too many calls from this network: wait, then try again. */
   E_TOO_MANY_REQUESTS: -32029,
 } as const

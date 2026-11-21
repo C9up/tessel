@@ -1,11 +1,11 @@
 import { createNapiConnection } from '@c9up/atlas'
-import limiter from '@c9up/blackhole/services/limiter'
 import { DateTime } from '@c9up/chronos'
 import { afterAll, beforeEach, describe, expect, test } from '@c9up/helix'
 import { type ThrowawayDevice, throwawayDevice } from '@tessel/core-web/server'
 import { createTesselClient, type TesselClient } from '@tessel/protocol'
 import databaseConfig from '#config/database.js'
 import { SqlMailboxes } from '#modules/delivery/infrastructure/SqlMailboxes.js'
+import { clearLimits } from '#modules/shared/__tests__/limits.js'
 import env from '#start/env.js'
 
 /**
@@ -88,7 +88,7 @@ async function threeAndAMessage(client: ApiClient) {
 }
 
 describe('acknowledgements and purge', () => {
-  beforeEach(() => limiter.clear())
+  beforeEach(() => clearLimits())
 
   afterAll(async () => {
     for (const device of devices.splice(0)) device.free()

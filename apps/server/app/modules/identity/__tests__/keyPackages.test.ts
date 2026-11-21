@@ -1,5 +1,4 @@
 import { createNapiConnection } from '@c9up/atlas'
-import limiter from '@c9up/blackhole/services/limiter'
 import { DateTime } from '@c9up/chronos'
 import { afterAll, beforeEach, describe, expect, test } from '@c9up/helix'
 import emitter from '@c9up/ream/events/services/main'
@@ -9,6 +8,7 @@ import databaseConfig from '#config/database.js'
 import { KeyPackagesLow } from '#modules/identity/domain/events.js'
 import { LOW_STOCK } from '#modules/identity/domain/keyPackages.js'
 import { SqlDevices } from '#modules/identity/infrastructure/SqlDevices.js'
+import { clearLimits } from '#modules/shared/__tests__/limits.js'
 import env from '#start/env.js'
 
 /**
@@ -91,7 +91,7 @@ function read(keyPackages: readonly { device: string; keyPackage: string }[]) {
 }
 
 describe('the KeyPackage directory', () => {
-  beforeEach(() => limiter.clear())
+  beforeEach(() => clearLimits())
 
   afterAll(async () => {
     for (const device of devices.splice(0)) device.free()

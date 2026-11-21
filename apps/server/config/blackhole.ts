@@ -1,7 +1,14 @@
+import { limiterStores } from '@c9up/blackhole'
 import { defineConfig } from '@c9up/blackhole/config'
 import env from '#start/env.js'
 
 export default defineConfig({
+  // Rate-limit counters live in KeyDB (story 04-06): every instance of the server counts
+  // the same calls, so a limit holds however many instances run.
+  limiter: {
+    default: 'redis',
+    stores: { redis: limiterStores.redis({ connection: 'main' }) },
+  },
   xss: true,
   // `/rpc` is exempt: the API knows no cookie, each call is authenticated by the
   // device's key (story 03-02). With no cookie that the browser would attach by itself,
