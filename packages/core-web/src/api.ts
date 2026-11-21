@@ -28,6 +28,23 @@ export interface KeyPackageUpdate {
   withdraw: Bytes[]
 }
 
+/** A new device waiting to be linked (story 03-04). */
+export interface LinkRequestInfo {
+  /** What the QR code shows: it holds the link's secret, never send it. */
+  qr: Bytes
+  /** The server's mailbox where the grant arrives. */
+  link: Bytes
+}
+
+/** What the granting device hands the server. */
+export interface LinkGrant {
+  link: Bytes
+  /** The new device's certificate, to register it. */
+  certificate: Bytes
+  /** The sealed grant, for the mailbox. */
+  grant: Bytes
+}
+
 /** A *KeyPackage* checked by the core. */
 export interface KeyPackageInfo {
   device: DeviceInfo
@@ -172,6 +189,18 @@ export interface TesselCore {
   holdsAccountKey(): Promise<boolean>
   /** Signs the server's sign-in challenge with the device key: the proof for `identity.signIn`. */
   signIn(challenge: Bytes): Promise<Bytes>
+
+  /**
+   * On a started profile without a device: a new device's key, waiting to be linked to
+   * an account by QR code (story 03-04). The key stays in the core.
+   */
+  requestLink(): Promise<LinkRequestInfo>
+  /** Opens the grant the server relayed, and starts this profile as the account's device. */
+  completeLink(grant: Bytes): Promise<DeviceInfo>
+  /** On the device holding the account key: certifies the device whose QR code was scanned. */
+  grantLink(qr: Bytes): Promise<LinkGrant>
+  /** The groups this device is a member of. */
+  groups(): Promise<Bytes[]>
   /** Releases the core and the database. */
   close(): Promise<void>
 
@@ -222,6 +251,10 @@ export const METHODS = [
   'device',
   'holdsAccountKey',
   'signIn',
+  'requestLink',
+  'completeLink',
+  'grantLink',
+  'groups',
   'close',
   'refreshKeyPackages',
   'verifyKeyPackage',

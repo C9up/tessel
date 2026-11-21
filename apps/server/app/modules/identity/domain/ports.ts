@@ -31,6 +31,21 @@ export interface Devices {
   find(deviceId: Uint8Array): Promise<KnownDevice | null>
   /** Marks the device revoked and deletes its sessions; whether it was known and live. */
   revoke(deviceId: Uint8Array): Promise<boolean>
+  /** How many live (unrevoked) devices the account has. */
+  live(accountId: string): Promise<number>
+  /**
+   * Registers a device of the account: only if the certificate's account key is the
+   * account's, and its identifier and key are new. Whether it was added.
+   */
+  add(accountId: string, device: CertifiedDevice): Promise<boolean>
+}
+
+/** The mailboxes of device links: one sealed grant per link, for a few minutes. */
+export interface LinkMailbox {
+  /** Leaves the grant; `false` when the link already holds one. */
+  post(link: Uint8Array, grant: Uint8Array): Promise<boolean>
+  /** Takes the grant out; `null` when there is none. */
+  take(link: Uint8Array): Promise<Uint8Array | null>
 }
 
 /** The sessions, each bound to one device. */

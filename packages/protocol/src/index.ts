@@ -23,6 +23,8 @@ export const Method = {
   publishKeyPackages: 'identity.publishKeyPackages',
   keyPackageStock: 'identity.keyPackageStock',
   claimKeyPackages: 'identity.claimKeyPackages',
+  linkDevice: 'identity.linkDevice',
+  takeLinkGrant: 'identity.takeLinkGrant',
 } as const
 
 /**
@@ -53,6 +55,10 @@ export const ServerError = {
   E_IDENTITY_INVALID_KEY_PACKAGE: -32602,
   /** The device already keeps as many KeyPackages as the directory takes. */
   E_IDENTITY_KEY_PACKAGE_STOCK_FULL: -32010,
+  /** The account already has as many devices as it may: revoke one first. */
+  E_IDENTITY_TOO_MANY_DEVICES: -32011,
+  /** The link already holds a grant: the new device shows a new QR code. */
+  E_IDENTITY_LINK_USED: -32012,
   /** Too many calls from this network: wait, then try again. */
   E_TOO_MANY_REQUESTS: -32029,
 } as const
@@ -158,6 +164,30 @@ export interface ClaimedKeyPackages {
   readonly keyPackages: readonly ClaimedKeyPackage[]
 }
 
+/** Parameters of `identity.linkDevice`: `TesselCore.grantLink`, base64url. */
+export interface LinkDeviceParams {
+  readonly certificate: string
+  readonly link: string
+  readonly grant: string
+}
+
+/** Response of `identity.linkDevice`. */
+export interface DeviceLinked {
+  readonly linked: true
+}
+
+/** Parameters of `identity.takeLinkGrant`. */
+export interface TakeLinkGrantParams {
+  /** base64url. */
+  readonly link: string
+}
+
+/** Response of `identity.takeLinkGrant`: the grant, once; nothing while it has not come. */
+export interface LinkGrantTaken {
+  /** base64url, for `TesselCore.completeLink`. */
+  readonly grant?: string
+}
+
 /** Response of `system.ping`: the server is there, and says which protocol it speaks. */
 export interface Pong {
   readonly pong: true
@@ -230,6 +260,17 @@ export function parseClaimedKeyPackages(data: unknown): ClaimedKeyPackages {
   throw new ProtocolError('E_PROTOCOL_BAD_RESULT', Method.claimKeyPackages)
 }
 
+export function parseDeviceLinked(data: unknown): DeviceLinked {
+  if (isRecord(data) && data.linked === true) return { linked: true }
+  throw new ProtocolError('E_PROTOCOL_BAD_RESULT', Method.linkDevice)
+}
+
+export function parseLinkGrantTaken(data: unknown): LinkGrantTaken {
+  if (isRecord(data) && data.grant === undefined) return {}
+  if (isRecord(data) && typeof data.grant === 'string' && fromBase64Url(data.grant) !== undefined) return { grant: data.grant }
+  throw new ProtocolError('E_PROTOCOL_BAD_RESULT', Method.takeLinkGrant)
+}
+
 /** What a device sends the directory: `TesselCore.refreshKeyPackages`. */
 export interface KeyPackageUpdate {
   readonly publish: readonly Uint8Array[]
@@ -256,6 +297,10 @@ export interface TesselClient {
   keyPackageStock(signal?: AbortSignal): Promise<KeyPackageStock>
   /** One KeyPackage per device of `account`, this device left out: each is handed out once. */
   claimKeyPackages(account: string, signal?: AbortSignal): Promise<ClaimedKeyPackages>
+  /** On the device holding the account key: registers the scanned device and posts its grant (`TesselCore.grantLink`). */
+  linkDevice(certificate: Uint8Array, link: Uint8Array, grant: Uint8Array, signal?: AbortSignal): Promise<DeviceLinked>
+  /** On the new device, without a session: its grant, once; `undefined` while it has not come. */
+  takeLinkGrant(link: Uint8Array, signal?: AbortSignal): Promise<Uint8Array<ArrayBuffer> | undefined>
 }
 
 export function createTesselClient(transport: RpcTransport, url = '/rpc'): TesselClient {
@@ -287,6 +332,15 @@ export function createTesselClient(transport: RpcTransport, url = '/rpc'): Tesse
     keyPackageStock: (signal) => rpc.call(Method.keyPackageStock, {}, { parse: parseKeyPackageStock, signal }),
     claimKeyPackages: (account, signal) =>
       rpc.call(Method.claimKeyPackages, { account } satisfies ClaimKeyPackagesParams, { parse: parseClaimedKeyPackages, signal }),
+    linkDevice: (certificate, link, grant, signal) =>
+      rpc.call(Method.linkDevice, { certificate: toBase64Url(certificate), link: toBase64Url(link), grant: toBase64Url(grant) } satisfies LinkDeviceParams, {
+        parse: parseDeviceLinked,
+        signal,
+      }),
+    takeLinkGrant: async (link, signal) => {
+      const { grant } = await rpc.call(Method.takeLinkGrant, { link: toBase64Url(link) } satisfies TakeLinkGrantParams, { parse: parseLinkGrantTaken, signal })
+      return grant === undefined ? undefined : fromBase64Url(grant)
+    },
   }
 }
 

@@ -31,3 +31,19 @@ export class KeyPackagesLow extends DomainEvent {
     this.stockLeft = stockLeft
   }
 }
+
+/**
+ * `identity.device.added`: a device was linked to an account by QR code (story 03-04).
+ * Opaque identifiers only: the account's, and the device's (hex).
+ */
+export class DeviceAdded extends DomainEvent {
+  readonly type = 'identity.device.added'
+  readonly accountId: string
+  readonly deviceId: string
+
+  constructor(accountId: string, deviceId: string) {
+    super()
+    this.accountId = accountId
+    this.deviceId = deviceId
+  }
+}

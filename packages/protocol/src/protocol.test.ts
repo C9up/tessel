@@ -8,7 +8,9 @@ import {
   parseAccountCreated,
   parseChallenge,
   parseClaimedKeyPackages,
+  parseDeviceLinked,
   parseKeyPackageStock,
+  parseLinkGrantTaken,
   parsePong,
   parseSession,
   parseSignedIn,
@@ -91,4 +93,13 @@ test('directory answers are checked', () => {
   assert.deepEqual(parseClaimedKeyPackages({ keyPackages: [] }), { keyPackages: [] })
   assert.throws(() => parseClaimedKeyPackages({ keyPackages: [{ device: 'AAAA' }] }), ProtocolError)
   assert.throws(() => parseClaimedKeyPackages({}), ProtocolError)
+})
+
+test('device link answers are checked', () => {
+  assert.deepEqual(parseDeviceLinked({ linked: true }), { linked: true })
+  assert.throws(() => parseDeviceLinked({}), ProtocolError)
+  assert.deepEqual(parseLinkGrantTaken({}), {})
+  assert.deepEqual(parseLinkGrantTaken({ grant: 'AAAA' }), { grant: 'AAAA' })
+  assert.throws(() => parseLinkGrantTaken({ grant: 'not base64!' }), ProtocolError)
+  assert.throws(() => parseLinkGrantTaken(null), ProtocolError)
 })

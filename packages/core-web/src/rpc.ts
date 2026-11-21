@@ -135,6 +135,18 @@ export class RemoteCore implements TesselCore {
   signIn(challenge: Bytes) {
     return this.#call('signIn', [challenge])
   }
+  requestLink() {
+    return this.#call('requestLink', [])
+  }
+  completeLink(grant: Bytes) {
+    return this.#call('completeLink', [grant])
+  }
+  grantLink(qr: Bytes) {
+    return this.#call('grantLink', [qr])
+  }
+  groups() {
+    return this.#call('groups', [])
+  }
   close() {
     return this.#call('close', [])
   }

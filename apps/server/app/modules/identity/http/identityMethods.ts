@@ -8,8 +8,10 @@ import {
   type ClaimedKeyPackages,
   type ClaimKeyPackagesParams,
   type CreateAccountParams,
+  type DeviceLinked,
   fromBase64Url,
   type KeyPackageStock,
+  type LinkGrantTaken,
   type Session,
   type SignedIn,
   type SignedOut,
@@ -20,6 +22,7 @@ import { RpcFailure } from '#modules/shared/http/rpc.js'
 import type { Authenticate } from '../application/Authenticate.js'
 import type { CreateAccount } from '../application/CreateAccount.js'
 import type { KeyPackageDirectory } from '../application/KeyPackageDirectory.js'
+import type { LinkDevice } from '../application/LinkDevice.js'
 import type { SignIn } from '../application/SignIn.js'
 import { IdentityError } from '../domain/account.js'
 import { type KeyPackageUpload, LOW_STOCK, MAX_BATCH } from '../domain/keyPackages.js'
@@ -51,6 +54,19 @@ export const CLAIMS = { requests: 60, duration: '1 minute' } as const
 
 /** Uploads by one device, per minute: a device renews its pool rarely. */
 export const UPLOADS = { requests: 10, duration: '1 minute' } as const
+
+/** Devices one device links, per hour. */
+export const LINKS = { requests: 10, duration: '1 hour' } as const
+
+/**
+ * Grant polls from one network, per minute: the new device asks every few seconds while
+ * the QR code is on screen. The link identifier is 128 random bits: guessing one is
+ * hopeless, this only bounds the work.
+ */
+export const GRANT_POLLS = { requests: 60, duration: '1 minute' } as const
+
+/** A sealed grant: a nonce, a certificate, a tag. Well under this. */
+const MAX_GRANT = 1024
 
 /** A KeyPackage of Tessel's suite is well under this many bytes. */
 const MAX_KEY_PACKAGE = 4096
@@ -112,6 +128,8 @@ function refused(error: unknown): never {
     if (error.code === 'unauthenticated') throw new RpcFailure('E_UNAUTHENTICATED')
     if (error.code === 'invalidKeyPackage') throw new RpcFailure('E_IDENTITY_INVALID_KEY_PACKAGE')
     if (error.code === 'stockFull') throw new RpcFailure('E_IDENTITY_KEY_PACKAGE_STOCK_FULL')
+    if (error.code === 'tooManyDevices') throw new RpcFailure('E_IDENTITY_TOO_MANY_DEVICES')
+    if (error.code === 'linkUsed') throw new RpcFailure('E_IDENTITY_LINK_USED')
     throw new RpcFailure('E_IDENTITY_INVALID_CERTIFICATE')
   }
   if (error instanceof ThrottleException) throw new RpcFailure('E_TOO_MANY_REQUESTS', { retryIn: error.response.availableIn })
@@ -130,6 +148,7 @@ export interface IdentityDeps {
   signIn: () => Promise<SignIn>
   authenticate: () => Promise<Authenticate>
   directory: () => Promise<KeyPackageDirectory>
+  link: () => Promise<LinkDevice>
 }
 
 /**
@@ -153,7 +172,19 @@ export function sessionGuard(deps: Pick<IdentityDeps, 'authenticate'>): (ctx: Ht
  */
 export function identityMethods(
   deps: IdentityDeps,
-): Record<'createAccount' | 'challenge' | 'signIn' | 'session' | 'signOut' | 'publishKeyPackages' | 'keyPackageStock' | 'claimKeyPackages', Handler> {
+): Record<
+  | 'createAccount'
+  | 'challenge'
+  | 'signIn'
+  | 'session'
+  | 'signOut'
+  | 'publishKeyPackages'
+  | 'keyPackageStock'
+  | 'claimKeyPackages'
+  | 'linkDevice'
+  | 'takeLinkGrant',
+  Handler
+> {
   const guard = sessionGuard(deps)
   return {
     createAccount: async (ctx, params) => {
@@ -237,6 +268,34 @@ export function identityMethods(
         return {
           keyPackages: claimed.map((entry) => ({ device: toBase64Url(entry.deviceId), keyPackage: toBase64Url(entry.keyPackage) })),
         } satisfies ClaimedKeyPackages
+      } catch (error) {
+        refused(error)
+      }
+    },
+
+    linkDevice: async (ctx, params) => {
+      const device = await guard(ctx)
+      try {
+        await limiter.use(LINKS).consume(`identity_link_${deviceKey(device)}`)
+        if (!isRecord(params)) throw new RpcFailure('E_INVALID_PARAMS')
+        const certificate = decoded(params.certificate, 2048)
+        const link = decoded(params.link, 16)
+        const grant = decoded(params.grant, MAX_GRANT)
+        if (certificate === undefined || link?.length !== 16 || grant === undefined || grant.length === 0) throw new RpcFailure('E_INVALID_PARAMS')
+        await (await deps.link()).run(device, certificate, link, grant)
+        return { linked: true } satisfies DeviceLinked
+      } catch (error) {
+        refused(error)
+      }
+    },
+
+    takeLinkGrant: async (ctx, params) => {
+      try {
+        await limiter.use(GRANT_POLLS).consume(`identity_grant_${clientKey(ctx.request.ip())}`)
+        const link = isRecord(params) ? decoded(params.link, 16) : undefined
+        if (link?.length !== 16) throw new RpcFailure('E_INVALID_PARAMS')
+        const grant = await (await deps.link()).takeGrant(link)
+        return (grant === null ? {} : { grant: toBase64Url(grant) }) satisfies LinkGrantTaken
       } catch (error) {
         refused(error)
       }

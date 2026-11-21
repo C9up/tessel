@@ -8,8 +8,8 @@
  * that produced it is on disk. Even a failed call persists what it changed.
  */
 
-import { Core, ciphersuite, generateStoreKey, statePartition, verifyKeyPackage, version } from '../generated/tessel_wasm.js'
-import { type DeviceInfo, type OutgoingBody, type Removal, type TesselCore, TesselError, type Trust } from './api.ts'
+import { Core, ciphersuite, generateStoreKey, PendingLink, statePartition, verifyKeyPackage, version } from '../generated/tessel_wasm.js'
+import { type DeviceInfo, type LinkGrant, type LinkRequestInfo, type OutgoingBody, type Removal, type TesselCore, TesselError, type Trust } from './api.ts'
 import { type Bytes, IndexedDbStore, loadStoreKey, type StoreChanges } from './store.ts'
 
 export interface CoreHostOptions {
@@ -36,6 +36,8 @@ export class CoreHost implements TesselCore {
   #core: Core | undefined
   /** The store key of a profile without an account yet, until `createAccount`. */
   #pendingKey: Bytes | undefined
+  /** A new device's key waiting for its grant, until `completeLink` (story 03-04). */
+  #pendingLink: PendingLink | undefined
   #queue: Promise<unknown> = Promise.resolve()
 
   constructor(options: CoreHostOptions) {
@@ -127,10 +129,59 @@ export class CoreHost implements TesselCore {
     return this.#call((core) => own(core.signIn(challenge)))
   }
 
+  requestLink(): Promise<LinkRequestInfo> {
+    return this.#serial(() => {
+      this.#awaitingDevice('requestLink')
+      this.#pendingLink?.free()
+      this.#pendingLink = new PendingLink()
+      return { qr: own(this.#pendingLink.qr()), link: own(this.#pendingLink.link()) }
+    })
+  }
+
+  completeLink(grant: Bytes): Promise<DeviceInfo> {
+    return this.#serial(() => {
+      const key = this.#awaitingDevice('completeLink')
+      const pending = this.#pendingLink
+      if (pending === undefined) throw new TesselError('host:no-link', 'completeLink needs requestLink first')
+      // The link is spent whatever happens: a refused grant means a new QR code.
+      this.#pendingLink = undefined
+      try {
+        this.#core = pending.accept(grant, key)
+      } finally {
+        pending.free()
+      }
+      key.fill(0)
+      this.#pendingKey = undefined
+      return this.#core.device()
+    })
+  }
+
+  grantLink(qr: Bytes): Promise<LinkGrant> {
+    return this.#call((core) => {
+      const granted: LinkGrant = core.grantLink(qr)
+      return { link: own(granted.link), certificate: own(granted.certificate), grant: own(granted.grant) }
+    })
+  }
+
+  groups(): Promise<Bytes[]> {
+    return this.#call((core) => core.groups())
+  }
+
+  /** The store key of a started profile without a device; refuses otherwise. */
+  #awaitingDevice(method: string): Bytes {
+    const key = this.#pendingKey
+    if (key === undefined) {
+      throw new TesselError(this.#core === undefined ? 'host:not-started' : 'host:account-exists', `${method} needs a started profile without a device`)
+    }
+    return key
+  }
+
   close(): Promise<void> {
     return this.#serial(() => {
       this.#pendingKey?.fill(0)
       this.#pendingKey = undefined
+      this.#pendingLink?.free()
+      this.#pendingLink = undefined
       // Persist what is left first: `#serial` persists after this task, so free after.
     }).finally(() => {
       this.#core?.free()

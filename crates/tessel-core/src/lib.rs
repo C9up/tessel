@@ -10,6 +10,7 @@ mod groups;
 mod history;
 mod identity;
 mod key_packages;
+mod link;
 mod media;
 mod messages;
 mod outbox;
@@ -30,6 +31,7 @@ pub use key_packages::{
     KEY_PACKAGE_LIFETIME, KEY_PACKAGE_POOL, KEY_PACKAGE_RENEW_BEFORE, KeyPackageError,
     KeyPackageUpdate, VerifiedKeyPackage, verify_key_package,
 };
+pub use link::{LINK_ID_LEN, LINK_QR_LEN, LINK_QR_VERSION, LinkError, LinkGrant, LinkRequest};
 pub use media::{
     EncryptedMedia, MEDIA_CHUNK, MEDIA_FORMAT, MediaDecryptor, MediaEncryptor, MediaError,
     MediaSeal, decrypt_media, encrypt_media, encrypted_len,

@@ -203,6 +203,19 @@ impl Client {
         self.account_key.is_some()
     }
 
+    /// The account key, on the device that holds it: only to certify a new device.
+    pub(crate) fn account_key(&self) -> Option<&AccountKey> {
+        self.account_key.as_ref()
+    }
+
+    /// The groups this device is a member of: those a newly linked device of the
+    /// account is added to (story 03-04).
+    pub fn groups(&self) -> Vec<GroupId> {
+        let mut groups: Vec<GroupId> = self.groups.keys().cloned().collect();
+        groups.sort_by(|a, b| a.as_bytes().cmp(b.as_bytes()));
+        groups
+    }
+
     /// Renews the *KeyPackage* pool at time `now` (Unix seconds) and returns what must
     /// be published and withdrawn on the server. To call at startup, then
     /// periodically.

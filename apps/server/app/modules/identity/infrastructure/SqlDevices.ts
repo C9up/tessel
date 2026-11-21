@@ -1,4 +1,5 @@
 import type { AsyncDatabaseConnection } from '@c9up/atlas'
+import type { CertifiedDevice } from '../domain/account.js'
 import type { Devices } from '../domain/ports.js'
 import type { KnownDevice } from '../domain/session.js'
 
@@ -46,5 +47,26 @@ export class SqlDevices implements Devices {
       [hex(deviceId)],
     )
     return row?.revoked === '1'
+  }
+
+  async live(accountId: string): Promise<number> {
+    const [row] = await this.#db.query<{ live: string }>('SELECT count(*)::text AS live FROM devices WHERE account_id = $1::uuid AND revoked_on IS NULL', [
+      accountId,
+    ])
+    return Number(row?.live ?? 0)
+  }
+
+  async add(accountId: string, device: CertifiedDevice): Promise<boolean> {
+    // Only into the account whose key signed the certificate; a known identifier or key
+    // inserts nothing.
+    const rows = await this.#db.query<{ id: string }>(
+      `INSERT INTO devices (id, account_id, device_key, certificate)
+       SELECT decode($2, 'hex'), a.id, decode($3, 'hex'), decode($4, 'hex')
+         FROM accounts a WHERE a.id = $1::uuid AND a.account_key = decode($5, 'hex')
+       ON CONFLICT DO NOTHING
+       RETURNING encode(id, 'hex') AS id`,
+      [accountId, hex(device.deviceId), hex(device.deviceKey), hex(device.certificate), hex(device.accountKey)],
+    )
+    return rows.length > 0
   }
 }

@@ -6,8 +6,8 @@ use std::fmt::Display;
 
 use js_sys::{Error, Reflect};
 use tessel_core::{
-    ClientError, GroupError, IdentityError, Ignored, KeyPackageError, MediaError, MessageError,
-    SafetyError, StoreError,
+    ClientError, GroupError, IdentityError, Ignored, KeyPackageError, LinkError, MediaError,
+    MessageError, SafetyError, StoreError,
 };
 use wasm_bindgen::JsValue;
 
@@ -177,5 +177,20 @@ impl Code for ClientError {
 impl Code for serde_wasm_bindgen::Error {
     fn code(&self) -> String {
         "input:malformed".to_owned()
+    }
+}
+
+impl Code for LinkError {
+    fn code(&self) -> String {
+        let case = match self {
+            Self::Identity(error) => return error.code(),
+            Self::Store(error) => return error.code(),
+            Self::MalformedQr => "malformed-qr",
+            Self::BadGrant => "bad-grant",
+            Self::WrongCertificate => "wrong-certificate",
+            Self::NoAccountKey => "no-account-key",
+            Self::Crypto => "crypto",
+        };
+        format!("link:{case}")
     }
 }

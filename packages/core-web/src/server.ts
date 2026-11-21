@@ -12,6 +12,7 @@ import {
   Core,
   generateStoreKey,
   initSync,
+  PendingLink,
   selfCheck,
   verifyCertificate as verify,
   verifyKeyPackage as verifyPackage,
@@ -99,8 +100,22 @@ export interface ThrowawayDevice {
   signIn(challenge: Uint8Array): Uint8Array
   /** Its *KeyPackage* pool renewed at `now` (Unix seconds), as `TesselCore.refreshKeyPackages` gives it. */
   refreshKeyPackages(now: number): KeyPackageBatch
+  /** `TesselCore.grantLink`: on an account's first device, it certifies a scanned device. */
+  grantLink(qr: Uint8Array): { link: Uint8Array<ArrayBuffer>; certificate: Uint8Array<ArrayBuffer>; grant: Uint8Array<ArrayBuffer> }
   /** Drops its keys. */
   free(): void
+}
+
+function throwaway(core: Core): ThrowawayDevice {
+  const device: CertifiedDevice = core.device()
+  return {
+    certificate: device.certificate,
+    deviceId: device.deviceId,
+    signIn: (challenge) => core.signIn(challenge),
+    refreshKeyPackages: (now) => core.refreshKeyPackages(now),
+    grantLink: (qr) => core.grantLink(qr),
+    free: () => core.free(),
+  }
 }
 
 /** For tests only: a throwaway account's first device. Its keys live until `free`. */
@@ -109,13 +124,33 @@ export function throwawayDevice(account: string): ThrowawayDevice {
   const key = generateStoreKey()
   const core = Core.createAccount(account, key)
   key.fill(0)
-  const device: CertifiedDevice = core.device()
+  return throwaway(core)
+}
+
+/** For tests only: a new device showing its link QR code (`TesselCore.requestLink`). */
+export interface ThrowawayLink {
+  readonly qr: Uint8Array
+  readonly link: Uint8Array
+  /** `TesselCore.completeLink`: the linked device. */
+  accept(grant: Uint8Array): ThrowawayDevice
+}
+
+/** For tests only: a new device waiting to be linked. */
+export function throwawayLink(): ThrowawayLink {
+  loadServerCore()
+  const pending = new PendingLink()
   return {
-    certificate: device.certificate,
-    deviceId: device.deviceId,
-    signIn: (challenge) => core.signIn(challenge),
-    refreshKeyPackages: (now) => core.refreshKeyPackages(now),
-    free: () => core.free(),
+    qr: pending.qr(),
+    link: pending.link(),
+    accept: (grant) => {
+      const key = generateStoreKey()
+      try {
+        return throwaway(pending.accept(grant, key))
+      } finally {
+        key.fill(0)
+        pending.free()
+      }
+    },
   }
 }
 

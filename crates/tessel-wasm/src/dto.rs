@@ -593,3 +593,14 @@ pub(crate) fn trust(trust: Trust) -> &'static str {
         Trust::KeyChanged => "key-changed",
     }
 }
+
+/// What the granting device hands the server (story 03-04).
+#[derive(Serialize)]
+pub(crate) struct LinkGrantDto {
+    /// The server's mailbox for the grant.
+    pub(crate) link: ByteBuf,
+    /// The new device's certificate, to register it.
+    pub(crate) certificate: ByteBuf,
+    /// The sealed grant, for the mailbox.
+    pub(crate) grant: ByteBuf,
+}

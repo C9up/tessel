@@ -95,6 +95,60 @@ for (const [transport, make] of Object.entries(transports)) {
     await again.close()
   })
 
+  test(`${transport}: a new profile links to an account by QR code and joins its groups`, async () => {
+    const { alice, bob, group } = await pair(make)
+    const database = `profile-${profiles++}`
+    const tablet = make(database)
+    assert.equal(await tablet.start(), undefined)
+
+    // The tablet shows its QR code; Alice's device scans it and grants.
+    const { qr, link } = await tablet.requestLink()
+    const granted = await alice.core.grantLink(qr)
+    assert.deepEqual(granted.link, link)
+    const device = await tablet.completeLink(granted.grant)
+    assert.equal(device.account, 'alice@tessel.example')
+    assert.deepEqual(device.certificate, granted.certificate)
+    assert.equal(await tablet.holdsAccountKey(), false)
+    await assert.rejects(tablet.completeLink(granted.grant), { name: 'TesselError', code: 'host:account-exists' })
+
+    // Alice adds it to each of her groups; it joins with the Welcome.
+    for (const each of await alice.core.groups()) {
+      const keyPackage = (await tablet.refreshKeyPackages(now())).publish[0]
+      assert.ok(keyPackage)
+      const { commit, welcome } = await alice.core.addDevices(each, [keyPackage])
+      await alice.core.commitAccepted(each)
+      await bob.core.process(commit)
+      assert.ok(welcome)
+      await tablet.joinGroup(welcome)
+    }
+    assert.deepEqual(await tablet.groups(), [group])
+    assert.equal((await tablet.members(group)).length, 3)
+
+    // Reopened, it is still Alice's device.
+    await tablet.close()
+    const again = make(database)
+    assert.deepEqual((await again.start())?.deviceId, device.deviceId)
+    await again.close()
+    await alice.core.close()
+    await bob.core.close()
+  })
+
+  test(`${transport}: a link refuses a QR code or a grant that is not one`, async () => {
+    const { core } = await account(make, 'alice')
+    await assert.rejects(core.grantLink(new Uint8Array(10)), { name: 'TesselError', code: 'link:malformed-qr' })
+    await assert.rejects(core.requestLink(), { name: 'TesselError', code: 'host:account-exists' })
+
+    const tablet = make(`profile-${profiles++}`)
+    await tablet.start()
+    await assert.rejects(tablet.completeLink(new Uint8Array(40)), { name: 'TesselError', code: 'host:no-link' })
+    await tablet.requestLink()
+    await assert.rejects(tablet.completeLink(new Uint8Array(40)), { name: 'TesselError', code: 'link:bad-grant' })
+    // The link is spent: a new QR code is needed.
+    await assert.rejects(tablet.completeLink(new Uint8Array(40)), { name: 'TesselError', code: 'host:no-link' })
+    await tablet.close()
+    await core.close()
+  })
+
   test(`${transport}: calls before start fail with a code`, async () => {
     const core = make(`profile-${profiles++}`)
     await assert.rejects(core.createGroup(), { name: 'TesselError', code: 'host:not-started' })

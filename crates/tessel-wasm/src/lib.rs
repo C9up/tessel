@@ -15,15 +15,15 @@ use serde::Serialize;
 use serde::de::DeserializeOwned;
 use serde_bytes::ByteBuf;
 use tessel_core::{
-    AccountId, Client, GroupId, MediaSeal, Message, Record, SendId, StoreKey, decrypt_media,
-    encrypt_media, verify_key_package,
+    AccountId, Client, GroupId, LinkRequest, MediaSeal, Message, Record, SendId, StoreKey,
+    decrypt_media, encrypt_media, verify_key_package,
 };
 use wasm_bindgen::prelude::{JsError, JsValue, wasm_bindgen};
 
 use crate::dto::{
     BodyDto, Commit, DeviceInfo, EncryptedFile, HistoryEntryDto, IncomingDto, KeyPackageInfo,
-    KeyPackages, OutboundDto, Queued, RemovalIn, SafetyDto, StoreChanges, StoredRecord,
-    certificate, id16,
+    KeyPackages, LinkGrantDto, OutboundDto, Queued, RemovalIn, SafetyDto, StoreChanges,
+    StoredRecord, certificate, id16,
 };
 use crate::error::OrJs as _;
 
@@ -112,6 +112,51 @@ fn records(value: JsValue) -> Result<Vec<Record>, JsValue> {
 
 fn group(value: &[u8]) -> GroupId {
     GroupId::from_bytes(value)
+}
+
+/// A new device waiting to be linked to an account by QR code (story 03-04). Its
+/// private key stays in here until [`PendingLink::accept`] makes it a [`Core`].
+#[wasm_bindgen]
+pub struct PendingLink {
+    request: Option<LinkRequest>,
+}
+
+#[wasm_bindgen]
+impl PendingLink {
+    /// A new device's key and identifier, and a fresh link.
+    #[wasm_bindgen(constructor)]
+    pub fn new() -> Result<PendingLink, JsValue> {
+        Ok(Self {
+            request: Some(LinkRequest::new().js()?),
+        })
+    }
+
+    fn request(&self) -> Result<&LinkRequest, JsValue> {
+        self.request
+            .as_ref()
+            .ok_or_else(|| error::fail("link:used", "the link was already accepted"))
+    }
+
+    /// What the QR code shows. It holds the link's secret: shown, never sent.
+    pub fn qr(&self) -> Result<Vec<u8>, JsValue> {
+        Ok(self.request()?.qr().to_vec())
+    }
+
+    /// The server's mailbox where the grant arrives.
+    pub fn link(&self) -> Result<Vec<u8>, JsValue> {
+        Ok(self.request()?.link().to_vec())
+    }
+
+    /// Opens the grant and starts the device, with a new database sealed with
+    /// `store_key`. Usable once.
+    pub fn accept(&mut self, grant: &[u8], store_key: &[u8]) -> Result<Core, JsValue> {
+        let request = self
+            .request
+            .take()
+            .ok_or_else(|| error::fail("link:used", "the link was already accepted"))?;
+        let key = StoreKey::from_bytes(store_key).js()?;
+        Core::start(request.accept(grant, &key).js()?)
+    }
 }
 
 /// A running device: the core's client, and the seal of the media secrets handed to
@@ -309,6 +354,23 @@ impl Core {
     pub fn outbound_sent(&mut self, group_id: &[u8], send_id: &[u8]) -> Result<(), JsValue> {
         let send_id = SendId::from_bytes(id16(send_id, "send id")?);
         self.client.outbound_sent(&group(group_id), &send_id).js()
+    }
+
+    /// The groups this device is a member of.
+    pub fn groups(&self) -> Result<JsValue, JsValue> {
+        to_js(&dto::groups(&self.client.groups()))
+    }
+
+    /// Certifies the device whose link QR code was scanned (story 03-04): its
+    /// certificate for the server, and the grant sealed for it.
+    #[wasm_bindgen(js_name = grantLink)]
+    pub fn grant_link(&self, qr: &[u8]) -> Result<JsValue, JsValue> {
+        let grant = self.client.grant_link(qr).js()?;
+        to_js(&LinkGrantDto {
+            link: ByteBuf::from(grant.link.to_vec()),
+            certificate: ByteBuf::from(grant.certificate.to_bytes().js()?),
+            grant: ByteBuf::from(grant.sealed),
+        })
     }
 
     #[wasm_bindgen(js_name = outboundGroups)]
