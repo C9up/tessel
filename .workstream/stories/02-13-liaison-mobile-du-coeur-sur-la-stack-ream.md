@@ -4,7 +4,7 @@ title: "Liaison mobile du cœur sur la stack Ream"
 description: "Le cœur atteint le téléphone par la liaison que la stack mobile de Ream définit (ABI C + JSI), avec la même API que sur le web."
 tags: [product]
 status: draft
-state: blocked
+state: review
 parent: epics/02-tessel-core-le-coeur-cryptographique.md
 depends_on: [stories/02-07-file-d-envoi-hors-ligne.md, stories/02-08-chiffrement-des-medias.md, stories/02-09-codes-de-securite.md]
 priority: high
