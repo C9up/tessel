@@ -1,0 +1,4 @@
+{
+  "extends": "../../packages/protocol/tsconfig.json",
+  "include": ["mobile", "reamrc.ts"]
+}

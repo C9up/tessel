@@ -1,0 +1,35 @@
+{
+  "name": "@tessel/core-mobile",
+  "version": "0.1.0",
+  "private": true,
+  "description": "tessel-core on the phone: the TesselCore of @tessel/core-web over a JSI module and the C ABI of crates/tessel-mobile, on Ream's mobile stack (orbit).",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "../../scripts/cargo.sh build -p tessel-mobile --features contract-host --bin contract-host && node --test 'src/**/*.test.ts'"
+  },
+  "reamNative": {
+    "specs": "specs",
+    "rust": [{ "manifest": "rust/Cargo.toml", "lib": "tessel_mobile" }],
+    "android": {
+      "java": "android/src/main/java",
+      "cmake": { "file": "android/tessel.cmake", "link": "tessel_link" },
+      "cxxModules": [{ "name": "NativeTessel", "header": "NativeTessel.h" }]
+    }
+  },
+  "dependencies": {
+    "@msgpack/msgpack": "^3.1.2",
+    "@tessel/core-web": "workspace:*"
+  },
+  "peerDependencies": {
+    "react-native": "0.87.1"
+  },
+  "devDependencies": {
+    "typescript": "~6.0.3",
+    "@types/node": "^24.19.2"
+  },
+  "license": "MIT"
+}

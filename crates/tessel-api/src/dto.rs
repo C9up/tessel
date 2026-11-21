@@ -5,6 +5,7 @@
 //! A media's key never crosses: the page holds a `secret`, sealed by the core for the
 //! time it runs ([`MediaSeal`]), and hands it back to decrypt or to send.
 
+use crate::error::{ApiError, Code as _, OrApi as _, ignored, malformed};
 use serde::{Deserialize, Serialize};
 use serde_bytes::ByteBuf;
 use tessel_core::{
@@ -13,26 +14,23 @@ use tessel_core::{
     KeyPackageUpdate, MediaRef, MediaSeal, Message, MessageId, Outbound, Outgoing, PartitionId,
     Profile, ReceiptKind, Record, RecordId, Removal, SafetyNumber, Trust,
 };
-use wasm_bindgen::JsValue;
-
-use crate::error::{Code as _, OrJs as _, ignored, malformed};
 
 fn bytes(value: impl Into<Vec<u8>>) -> ByteBuf {
     ByteBuf::from(value.into())
 }
 
-pub(crate) fn id16(value: &[u8], what: &str) -> Result<[u8; 16], JsValue> {
+pub(crate) fn id16(value: &[u8], what: &str) -> Result<[u8; 16], ApiError> {
     value.try_into().map_err(|_| malformed(what))
 }
 
-pub(crate) fn message_id(value: &[u8]) -> Result<MessageId, JsValue> {
+pub(crate) fn message_id(value: &[u8]) -> Result<MessageId, ApiError> {
     id16(value, "message id").map(MessageId::from_bytes)
 }
 
 /// A device, as the page shows it and hands it back: public data only.
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct DeviceInfo {
+pub struct DeviceInfo {
     account: String,
     device_id: ByteBuf,
     account_key: ByteBuf,
@@ -42,55 +40,55 @@ pub(crate) struct DeviceInfo {
 }
 
 impl DeviceInfo {
-    pub(crate) fn of(certificate: &DeviceCertificate) -> Result<Self, JsValue> {
+    pub(crate) fn of(certificate: &DeviceCertificate) -> Result<Self, ApiError> {
         Ok(Self {
             account: certificate.account().to_string(),
             device_id: bytes(certificate.device_id().as_bytes().to_vec()),
             account_key: bytes(certificate.account_key()),
             device_key: bytes(certificate.device_key()),
-            certificate: bytes(certificate.to_bytes().js()?),
+            certificate: bytes(certificate.to_bytes().api()?),
         })
     }
 
-    pub(crate) fn all(certificates: &[DeviceCertificate]) -> Result<Vec<Self>, JsValue> {
+    pub(crate) fn all(certificates: &[DeviceCertificate]) -> Result<Vec<Self>, ApiError> {
         certificates.iter().map(Self::of).collect()
     }
 }
 
 /// A certificate handed back by the page: parsed and verified again.
-pub(crate) fn certificate(value: &[u8]) -> Result<DeviceCertificate, JsValue> {
-    let certificate = DeviceCertificate::from_bytes(value).js()?;
-    certificate.verify().js()?;
+pub(crate) fn certificate(value: &[u8]) -> Result<DeviceCertificate, ApiError> {
+    let certificate = DeviceCertificate::from_bytes(value).api()?;
+    certificate.verify().api()?;
     Ok(certificate)
 }
 
 /// A sealed record, both ways.
 #[derive(Serialize, Deserialize)]
-pub(crate) struct StoredRecord {
+pub struct StoredRecord {
     partition: ByteBuf,
     id: ByteBuf,
     value: ByteBuf,
 }
 
 impl StoredRecord {
-    pub(crate) fn into_record(self) -> Result<Record, JsValue> {
+    pub(crate) fn into_record(self) -> Result<Record, ApiError> {
         Ok(Record {
-            partition: PartitionId::from_bytes(&self.partition).js()?,
-            id: RecordId::from_bytes(&self.id).js()?,
+            partition: PartitionId::from_bytes(&self.partition).api()?,
+            id: RecordId::from_bytes(&self.id).api()?,
             value: self.value.into_vec(),
         })
     }
 }
 
 #[derive(Serialize)]
-pub(crate) struct RecordKey {
+pub struct RecordKey {
     partition: ByteBuf,
     id: ByteBuf,
 }
 
 /// What to persist after a call.
 #[derive(Serialize)]
-pub(crate) struct StoreChanges {
+pub struct StoreChanges {
     put: Vec<StoredRecord>,
     delete: Vec<RecordKey>,
 }
@@ -121,7 +119,7 @@ impl From<tessel_core::Changes> for StoreChanges {
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct KeyPackages {
+pub struct KeyPackages {
     publish: Vec<ByteBuf>,
     #[serde(skip_serializing_if = "Option::is_none")]
     last_resort: Option<ByteBuf>,
@@ -140,7 +138,7 @@ impl From<KeyPackageUpdate> for KeyPackages {
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct KeyPackageInfo {
+pub struct KeyPackageInfo {
     pub(crate) device: DeviceInfo,
     pub(crate) reference: ByteBuf,
     pub(crate) last_resort: bool,
@@ -149,7 +147,7 @@ pub(crate) struct KeyPackageInfo {
 }
 
 #[derive(Serialize)]
-pub(crate) struct Commit {
+pub struct Commit {
     commit: ByteBuf,
     #[serde(skip_serializing_if = "Option::is_none")]
     welcome: Option<ByteBuf>,
@@ -167,14 +165,14 @@ impl From<Outgoing> for Commit {
 /// Whom to remove: an account, or one of its devices.
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct RemovalIn {
+pub struct RemovalIn {
     account: String,
     device_id: Option<ByteBuf>,
 }
 
 impl RemovalIn {
-    pub(crate) fn into_removal(self) -> Result<Removal, JsValue> {
-        let account = AccountId::parse(&self.account).js()?;
+    pub(crate) fn into_removal(self) -> Result<Removal, ApiError> {
+        let account = AccountId::parse(&self.account).api()?;
         Ok(match self.device_id {
             None => Removal::Account(account),
             Some(device) => {
@@ -187,7 +185,7 @@ impl RemovalIn {
 /// A media as the page sees it: what to show, and its sealed secret.
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct MediaInfo {
+pub struct MediaInfo {
     blob: ByteBuf,
     size: u64,
     content_type: String,
@@ -196,22 +194,22 @@ pub(crate) struct MediaInfo {
 }
 
 impl MediaInfo {
-    fn of(media: &MediaRef, seal: &MediaSeal) -> Result<Self, JsValue> {
+    fn of(media: &MediaRef, seal: &MediaSeal) -> Result<Self, ApiError> {
         Ok(Self {
             blob: bytes(media.blob.clone()),
             size: media.size,
             content_type: media.content_type.clone(),
             name: media.name.clone(),
-            secret: bytes(seal.seal(&EncryptedMedia::of(media)).js()?),
+            secret: bytes(seal.seal(&EncryptedMedia::of(media)).api()?),
         })
     }
 }
 
-/// A media to send: the secret [`crate::Core::encrypt_media`] gave, and where the
+/// A media to send: the secret [`crate::Session::encrypt_media`] gave, and where the
 /// server stored the blob.
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct MediaIn {
+pub struct MediaIn {
     secret: ByteBuf,
     blob: ByteBuf,
     content_type: String,
@@ -221,7 +219,7 @@ pub(crate) struct MediaIn {
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct EncryptedFile {
+pub struct EncryptedFile {
     pub(crate) encrypted: ByteBuf,
     pub(crate) size: u64,
     pub(crate) secret: ByteBuf,
@@ -238,7 +236,7 @@ fn receipt_kind(kind: ReceiptKind) -> &'static str {
 /// page's bytes without going through serde's untyped buffer.)
 #[derive(Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct BodyDto {
+pub struct BodyDto {
     #[serde(rename = "type")]
     kind: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -259,16 +257,16 @@ pub(crate) struct BodyDto {
     target: Option<ByteBuf>,
 }
 
-fn optional_id(id: Option<ByteBuf>) -> Result<Option<MessageId>, JsValue> {
+fn optional_id(id: Option<ByteBuf>) -> Result<Option<MessageId>, ApiError> {
     id.map(|id| message_id(&id)).transpose()
 }
 
-fn required<T>(value: Option<T>, what: &str) -> Result<T, JsValue> {
+fn required<T>(value: Option<T>, what: &str) -> Result<T, ApiError> {
     value.ok_or_else(|| malformed(what))
 }
 
 impl BodyDto {
-    pub(crate) fn of(body: &Body, seal: &MediaSeal) -> Result<Self, JsValue> {
+    pub(crate) fn of(body: &Body, seal: &MediaSeal) -> Result<Self, ApiError> {
         let id = |id: &MessageId| bytes(id.as_bytes().to_vec());
         Ok(match body {
             Body::Text { text, reply_to } => Self {
@@ -313,7 +311,7 @@ impl BodyDto {
         })
     }
 
-    pub(crate) fn into_body(self, seal: &MediaSeal) -> Result<Body, JsValue> {
+    pub(crate) fn into_body(self, seal: &MediaSeal) -> Result<Body, ApiError> {
         Ok(match self.kind.as_str() {
             "text" => Body::Text {
                 text: required(self.text, "text")?,
@@ -321,7 +319,7 @@ impl BodyDto {
             },
             "media" => {
                 let media = required(self.media_in, "media")?;
-                let secret = seal.open(&media.secret).js()?;
+                let secret = seal.open(&media.secret).api()?;
                 Body::Media {
                     media: secret.into_ref(media.blob.into_vec(), media.content_type, media.name),
                     caption: self.caption.unwrap_or_default(),
@@ -354,14 +352,14 @@ impl BodyDto {
 /// A received message.
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct MessageDto {
+pub struct MessageDto {
     id: ByteBuf,
     sent_at: u64,
     body: BodyDto,
 }
 
 impl MessageDto {
-    fn of(message: &Message, seal: &MediaSeal) -> Result<Self, JsValue> {
+    fn of(message: &Message, seal: &MediaSeal) -> Result<Self, ApiError> {
         Ok(Self {
             id: bytes(message.id.as_bytes().to_vec()),
             sent_at: message.sent_at,
@@ -372,7 +370,7 @@ impl MessageDto {
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct Queued {
+pub struct Queued {
     pub(crate) message_id: ByteBuf,
     pub(crate) send_id: ByteBuf,
 }
@@ -388,7 +386,7 @@ impl Queued {
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct OutboundDto {
+pub struct OutboundDto {
     group: ByteBuf,
     send_id: ByteBuf,
     message_id: ByteBuf,
@@ -428,7 +426,7 @@ fn effect(effect: Effect) -> (&'static str, Option<&'static str>) {
 /// A profile, both ways (story 03-06).
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct ProfileDto {
+pub struct ProfileDto {
     name: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     avatar: Option<AvatarDto>,
@@ -436,7 +434,7 @@ pub(crate) struct ProfileDto {
 
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct AvatarDto {
+pub struct AvatarDto {
     content_type: String,
     image: ByteBuf,
 }
@@ -472,7 +470,7 @@ impl From<ProfileDto> for Profile {
     rename_all = "camelCase",
     rename_all_fields = "camelCase"
 )]
-pub(crate) enum IncomingDto {
+pub enum IncomingDto {
     Message {
         group: ByteBuf,
         sender: DeviceInfo,
@@ -502,7 +500,7 @@ pub(crate) enum IncomingDto {
 }
 
 impl IncomingDto {
-    pub(crate) fn of(incoming: Incoming, seal: &MediaSeal) -> Result<Self, JsValue> {
+    pub(crate) fn of(incoming: Incoming, seal: &MediaSeal) -> Result<Self, ApiError> {
         Ok(match incoming {
             Incoming::Message {
                 group,
@@ -556,7 +554,7 @@ impl IncomingDto {
     rename_all = "camelCase",
     rename_all_fields = "camelCase"
 )]
-pub(crate) enum ContentDto {
+pub enum ContentDto {
     Text {
         text: String,
         #[serde(skip_serializing_if = "Option::is_none")]
@@ -577,7 +575,7 @@ pub(crate) enum ContentDto {
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct HistoryEntryDto {
+pub struct HistoryEntryDto {
     id: ByteBuf,
     author: String,
     device_id: ByteBuf,
@@ -586,7 +584,7 @@ pub(crate) struct HistoryEntryDto {
 }
 
 impl HistoryEntryDto {
-    pub(crate) fn of(entry: HistoryEntry, seal: &MediaSeal) -> Result<Self, JsValue> {
+    pub(crate) fn of(entry: HistoryEntry, seal: &MediaSeal) -> Result<Self, ApiError> {
         let id = |id: MessageId| bytes(id.as_bytes().to_vec());
         Ok(Self {
             id: id(entry.id),
@@ -621,7 +619,7 @@ impl HistoryEntryDto {
 }
 
 #[derive(Serialize)]
-pub(crate) struct SafetyDto {
+pub struct SafetyDto {
     digits: String,
     qr: ByteBuf,
 }
@@ -646,7 +644,7 @@ pub(crate) fn trust(trust: Trust) -> &'static str {
 
 /// What the granting device hands the server (story 03-04).
 #[derive(Serialize)]
-pub(crate) struct LinkGrantDto {
+pub struct LinkGrantDto {
     /// The server's mailbox for the grant.
     pub(crate) link: ByteBuf,
     /// The new device's certificate, to register it.
@@ -658,7 +656,7 @@ pub(crate) struct LinkGrantDto {
 /// The public header of an envelope (story 04-01): what the server routes on.
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct EnvelopeHeaderDto {
+pub struct EnvelopeHeaderDto {
     kind: &'static str,
     #[serde(skip_serializing_if = "Option::is_none")]
     group: Option<ByteBuf>,
@@ -692,7 +690,7 @@ pub(crate) fn devices(devices: &[DeviceId]) -> Vec<ByteBuf> {
 /// A group in the conversation list (story 05-01).
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct ConversationDto {
+pub struct ConversationDto {
     group: ByteBuf,
     /// Milliseconds, the sender's clock; absent before any message.
     #[serde(skip_serializing_if = "Option::is_none")]

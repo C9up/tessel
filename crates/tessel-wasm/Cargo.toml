@@ -13,10 +13,10 @@ crate-type = ["cdylib", "rlib"]
 [dependencies]
 # Pinned with wasm-bindgen: a newer js-sys requires a newer wasm-bindgen.
 js-sys = "=0.3.106"
-serde = { version = "1.0.229", features = ["derive"] }
+serde = "1.0.229"
 serde-wasm-bindgen = "0.6.5"
 serde_bytes = "0.11"
-tessel-core = { path = "../tessel-core" }
+tessel-api = { path = "../tessel-api" }
 # Pinned: the crate version must match the `wasm-bindgen` CLI that produces the JS.
 wasm-bindgen = "=0.2.129"
 

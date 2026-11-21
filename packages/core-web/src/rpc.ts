@@ -7,11 +7,19 @@
 import { METHODS, type Profile, type TesselCore, TesselError } from './api.ts'
 import type { Bytes } from './store.ts'
 
-/** A worker, the worker's global scope, or a `MessagePort`. */
+/** What a listener reads of a message: its data (a `MessageEvent` has it). */
+export interface Delivered {
+  readonly data: unknown
+}
+
+/**
+ * A worker, the worker's global scope, or a `MessagePort`; on the phone, the native
+ * module behind `@tessel/core-mobile` (story 02-13).
+ */
 export interface Endpoint {
   postMessage(message: unknown): void
-  addEventListener(type: 'message', listener: (event: MessageEvent) => void): void
-  removeEventListener(type: 'message', listener: (event: MessageEvent) => void): void
+  addEventListener(type: 'message', listener: (event: Delivered) => void): void
+  removeEventListener(type: 'message', listener: (event: Delivered) => void): void
   /** A `MessagePort` only delivers once started. */
   start?(): void
 }
@@ -53,7 +61,7 @@ function isResponse(data: unknown): data is Response {
 export function serve(endpoint: Endpoint, core: TesselCore | Promise<TesselCore>): () => void {
   // Listening at once: a message posted before the core is ready waits for it.
   const ready = Promise.resolve(core)
-  const listener = (event: MessageEvent) => {
+  const listener = (event: Delivered) => {
     const request: unknown = event.data
     if (!isRequest(request)) return
     const { id, method, args } = request
@@ -82,7 +90,7 @@ export class RemoteCore implements TesselCore {
   readonly #endpoint: Endpoint
   readonly #pending = new Map<number, { resolve: (value: unknown) => void; reject: (error: TesselError) => void }>()
   #next = 0
-  readonly #listener = (event: MessageEvent) => {
+  readonly #listener = (event: Delivered) => {
     const response: unknown = event.data
     if (!isResponse(response)) return
     const pending = this.#pending.get(response.id)

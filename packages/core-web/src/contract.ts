@@ -1,0 +1,276 @@
+/**
+ * The contract of `TesselCore` (stories 02-10, 02-13): scenarios every way of reaching
+ * the core passes, whatever carries the calls. The web runs them on the core in the
+ * worker and through messages (`contract.test.ts`), the mobile binding on its native
+ * host (`@tessel/core-mobile`).
+ */
+
+import assert from 'node:assert/strict'
+import { readFile } from 'node:fs/promises'
+import { test } from 'node:test'
+import { type DeviceInfo, outboxOf, type TesselCore, TesselError } from './api.ts'
+import { type OutboundMessage, OutboxSender } from './outbox.ts'
+
+/** How a test reaches a profile's core: the same name opens the same profile. */
+export type Transport = (database: string) => TesselCore
+
+let profiles = 0
+const encode = (text: string) => new TextEncoder().encode(text)
+const now = () => Math.floor(Date.now() / 1000)
+
+/** A new profile with an account. */
+async function account(make: Transport, name: string): Promise<{ core: TesselCore; device: DeviceInfo; database: string }> {
+  const database = `profile-${profiles++}`
+  const core = make(database)
+  assert.equal(await core.start(), undefined)
+  const device = await core.createAccount(`${name}@tessel.example`)
+  return { core, device, database }
+}
+
+/** Alice creates a group with Bob in it. */
+async function pair(make: Transport) {
+  const alice = await account(make, 'alice')
+  const bob = await account(make, 'bob')
+  const keyPackage = (await bob.core.refreshKeyPackages(now())).publish[0]
+  assert.ok(keyPackage)
+  const group = await alice.core.createGroup()
+  const { welcome } = await alice.core.addDevices(group, [keyPackage])
+  await alice.core.commitAccepted(group)
+  assert.ok(welcome)
+  assert.deepEqual(await bob.core.joinGroup(welcome), group)
+  return { alice, bob, group }
+}
+
+/** Sends the head of the queue, as the relay would, and returns it. */
+async function sendNext(core: TesselCore, group: Uint8Array<ArrayBuffer>): Promise<OutboundMessage> {
+  const outbound = await core.nextOutbound(group)
+  assert.ok(outbound)
+  await core.outboundSent(group, outbound.sendId)
+  return outbound
+}
+
+/** Runs every scenario on each transport. */
+export function contract(transports: Record<string, Transport>): void {
+  for (const [transport, make] of Object.entries(transports)) {
+    test(`${transport}: a profile has no device until its account is created, and keeps it`, async () => {
+      const { core, device, database } = await account(make, 'alice')
+      const cargo = await readFile(new URL('../../../crates/tessel-core/Cargo.toml', import.meta.url), 'utf8')
+      assert.equal(await core.version(), /^version = "([^"]+)"/m.exec(cargo)?.[1])
+      assert.equal(await core.ciphersuite(), 'MLS_128_DHKEMX25519_AES128GCM_SHA256_Ed25519')
+      assert.equal(device.account, 'alice@tessel.example')
+      assert.equal(device.deviceId.length, 16)
+      assert.equal(await core.holdsAccountKey(), true)
+      // The sign-in proof (story 03-02): an Ed25519 signature, for a 32-byte challenge only.
+      assert.equal((await core.signIn(new Uint8Array(32).fill(7))).length, 64)
+      await assert.rejects(core.signIn(new Uint8Array(31)), { name: 'TesselError', code: 'identity:malformed-challenge' })
+      await assert.rejects(core.createAccount('alice@tessel.example'), { name: 'TesselError', code: 'host:account-exists' })
+      await core.close()
+
+      const again = make(database)
+      assert.deepEqual((await again.start())?.deviceId, device.deviceId)
+      assert.equal(await again.holdsAccountKey(), true)
+      await again.close()
+    })
+
+    test(`${transport}: a new profile links to an account by QR code and joins its groups`, async () => {
+      const { alice, bob, group } = await pair(make)
+      const database = `profile-${profiles++}`
+      const tablet = make(database)
+      assert.equal(await tablet.start(), undefined)
+
+      // The tablet shows its QR code; Alice's device scans it and grants.
+      const { qr, link } = await tablet.requestLink()
+      const granted = await alice.core.grantLink(qr)
+      assert.deepEqual(granted.link, link)
+      const device = await tablet.completeLink(granted.grant)
+      assert.equal(device.account, 'alice@tessel.example')
+      assert.deepEqual(device.certificate, granted.certificate)
+      assert.equal(await tablet.holdsAccountKey(), false)
+      await assert.rejects(tablet.completeLink(granted.grant), { name: 'TesselError', code: 'host:account-exists' })
+
+      // Alice adds it to each of her groups; it joins with the Welcome.
+      for (const each of await alice.core.groups()) {
+        const keyPackage = (await tablet.refreshKeyPackages(now())).publish[0]
+        assert.ok(keyPackage)
+        const { commit, welcome } = await alice.core.addDevices(each, [keyPackage])
+        await alice.core.commitAccepted(each)
+        await bob.core.process(commit)
+        assert.ok(welcome)
+        await tablet.joinGroup(welcome)
+      }
+      assert.deepEqual(await tablet.groups(), [group])
+      assert.equal((await tablet.members(group)).length, 3)
+      // Its envelopes go to Alice's phone and to Bob, not to itself (story 04-01).
+      const recipients = (await tablet.recipients(group)).map((id) => id.join()).sort()
+      assert.deepEqual(recipients, [alice.device.deviceId.join(), bob.device.deviceId.join()].sort())
+
+      // Deleting the account (story 03-07) takes the account key too.
+      assert.equal((await alice.core.signAccountDeletion()).length, 64)
+      await assert.rejects(tablet.signAccountDeletion(), { name: 'TesselError', code: 'link:no-account-key' })
+
+      // Revoked (story 03-05): Alice signs it, then removes it from each of its groups.
+      assert.equal((await alice.core.revokeDevice(device.deviceId)).length, 64)
+      await assert.rejects(tablet.revokeDevice(alice.device.deviceId), { name: 'TesselError', code: 'link:no-account-key' })
+      assert.deepEqual(await alice.core.groupsWith(device.deviceId), [group])
+      const removal = await alice.core.removeDevices(group, [{ account: 'alice@tessel.example', deviceId: device.deviceId }])
+      await alice.core.commitAccepted(group)
+      const seen = await bob.core.process(removal.commit)
+      assert.equal(seen.type, 'commit')
+      assert.deepEqual(await alice.core.groupsWith(device.deviceId), [])
+
+      // Reopened, it is still Alice's device.
+      await tablet.close()
+      const again = make(database)
+      assert.deepEqual((await again.start())?.deviceId, device.deviceId)
+      await again.close()
+      await alice.core.close()
+      await bob.core.close()
+    })
+
+    test(`${transport}: a profile opens for contacts once its key is shared, and its changes reach them`, async () => {
+      const { alice, bob, group } = await pair(make)
+      const avatar = { contentType: 'image/webp', image: new Uint8Array(500).fill(9) }
+      const blob = await alice.core.sealProfile({ name: 'Alice', avatar })
+      assert.deepEqual(await alice.core.openProfile('alice@tessel.example', blob), { name: 'Alice', avatar })
+      assert.equal(await bob.core.knowsProfile('alice@tessel.example'), false)
+      await assert.rejects(bob.core.openProfile('alice@tessel.example', blob), { name: 'TesselError', code: 'profile:unknown-key' })
+
+      // Alice shares her key: Bob hears of it, and opens her profile.
+      await alice.core.shareProfile(group, Date.now())
+      const shared = await sendNext(alice.core, group)
+      const seen = await bob.core.process(shared.encrypted)
+      assert.equal(seen.type === 'message' && seen.effect, 'profile-updated')
+      assert.equal(seen.type === 'message' && seen.message?.body.type, 'profileKey')
+      assert.deepEqual(await bob.core.openProfile('alice@tessel.example', blob), { name: 'Alice', avatar })
+      // Nothing of it in the history.
+      assert.deepEqual(await bob.core.history(group), [])
+      await assert.rejects(alice.core.sealProfile({ name: '' }), { name: 'TesselError', code: 'profile:invalid' })
+      await alice.core.close()
+      await bob.core.close()
+    })
+
+    test(`${transport}: a link refuses a QR code or a grant that is not one`, async () => {
+      const { core } = await account(make, 'alice')
+      await assert.rejects(core.grantLink(new Uint8Array(10)), { name: 'TesselError', code: 'link:malformed-qr' })
+      await assert.rejects(core.requestLink(), { name: 'TesselError', code: 'host:account-exists' })
+
+      const tablet = make(`profile-${profiles++}`)
+      await tablet.start()
+      await assert.rejects(tablet.completeLink(new Uint8Array(40)), { name: 'TesselError', code: 'host:no-link' })
+      await tablet.requestLink()
+      await assert.rejects(tablet.completeLink(new Uint8Array(40)), { name: 'TesselError', code: 'link:bad-grant' })
+      // The link is spent: a new QR code is needed.
+      await assert.rejects(tablet.completeLink(new Uint8Array(40)), { name: 'TesselError', code: 'host:no-link' })
+      await tablet.close()
+      await core.close()
+    })
+
+    test(`${transport}: calls before start fail with a code`, async () => {
+      const core = make(`profile-${profiles++}`)
+      await assert.rejects(core.createGroup(), { name: 'TesselError', code: 'host:not-started' })
+      await assert.rejects(core.createAccount('not an account'), { code: 'host:not-started' })
+      await core.start()
+      await assert.rejects(core.createAccount('not an account'), { code: 'identity:invalid-account' })
+    })
+
+    test(`${transport}: two devices write, edit and read their history`, async () => {
+      const { alice, bob, group } = await pair(make)
+      assert.equal((await alice.core.members(group)).length, 2)
+      assert.equal(await bob.core.epoch(group), await alice.core.epoch(group))
+
+      const queued = await alice.core.queueMessage(group, { type: 'text', text: 'hello bob' }, 1_000)
+      assert.deepEqual(await alice.core.waitingMessages(group), [queued.messageId])
+      const outbound = await sendNext(alice.core, group)
+      assert.deepEqual(outbound.messageId, queued.messageId)
+      assert.deepEqual(await alice.core.outboundGroups(), [])
+
+      const incoming = await bob.core.process(outbound.encrypted)
+      assert.equal(incoming.type, 'message')
+      assert.ok(incoming.type === 'message')
+      assert.equal(incoming.sender.account, 'alice@tessel.example')
+      assert.equal(incoming.effect, 'added')
+      assert.deepEqual(incoming.message?.body, { type: 'text', text: 'hello bob' })
+
+      await alice.core.queueMessage(group, { type: 'edit', target: queued.messageId, text: 'hello, bob' }, 2_000)
+      assert.equal((await bob.core.process((await sendNext(alice.core, group)).encrypted)).type, 'message')
+      for (const core of [alice.core, bob.core]) {
+        const [entry, ...rest] = await core.history(group)
+        assert.equal(rest.length, 0)
+        assert.equal(entry?.author, 'alice@tessel.example')
+        assert.deepEqual(entry?.content, { type: 'text', text: 'hello, bob', editedAt: 2_000 })
+      }
+
+      // Bob cannot edit Alice's message: refused before anything is sent.
+      await assert.rejects(bob.core.queueMessage(group, { type: 'edit', target: queued.messageId, text: 'bye' }, 3_000), {
+        code: 'group:ignored:not-author',
+      })
+      await assert.rejects(bob.core.process(encode('not mls')), { code: 'group:malformed' })
+      await assert.rejects(bob.core.commitAccepted(group), (error: unknown) => error instanceof TesselError && error.code === 'group:no-pending-commit')
+    })
+
+    test(`${transport}: a media goes through encrypted, its key sealed in the core`, async () => {
+      const { alice, bob, group } = await pair(make)
+      const file = new Uint8Array(200_000).map((_, i) => i % 251)
+      const { encrypted, secret, size } = await alice.core.encryptMedia(file)
+      assert.equal(size, file.length)
+      assert.notDeepEqual(encrypted.subarray(0, 1000), file.subarray(0, 1000))
+
+      const blob = encode('blob-1')
+      await alice.core.queueMessage(group, { type: 'media', media: { secret, blob, contentType: 'image/png', name: 'cat.png' }, caption: 'a cat' }, 1_000)
+      const incoming = await bob.core.process((await sendNext(alice.core, group)).encrypted)
+      assert.ok(incoming.type === 'message' && incoming.message?.body.type === 'media')
+      const { media, caption } = incoming.message.body
+      assert.equal(caption, 'a cat')
+      assert.deepEqual([media.blob, media.size, media.contentType, media.name], [blob, file.length, 'image/png', 'cat.png'])
+      assert.deepEqual(await bob.core.decryptMedia(media.secret, encrypted), file)
+
+      // A secret only opens in the core that sealed it; the history hands out new ones.
+      await assert.rejects(alice.core.decryptMedia(media.secret, encrypted), { code: 'media:altered' })
+      const [entry] = await bob.core.history(group)
+      assert.ok(entry?.content.type === 'media')
+      assert.deepEqual(await bob.core.decryptMedia(entry.content.media.secret, encrypted), file)
+      const altered = Uint8Array.from(encrypted)
+      altered[100] = (altered[100] ?? 0) ^ 1
+      await assert.rejects(bob.core.decryptMedia(media.secret, altered), { code: 'media:altered' })
+    })
+
+    test(`${transport}: safety numbers match, and trust follows the verification`, async () => {
+      const { alice, bob } = await pair(make)
+      const seenByAlice = await alice.core.safetyNumber(bob.device.certificate)
+      const seenByBob = await bob.core.safetyNumber(alice.device.certificate)
+      assert.equal(seenByAlice.digits, seenByBob.digits)
+      assert.equal(seenByAlice.digits.length, 60)
+      await alice.core.checkScanned(bob.device.certificate, seenByBob.qr)
+      await assert.rejects(alice.core.checkScanned(bob.device.certificate, seenByAlice.qr), { code: 'safety:mismatch' })
+
+      assert.equal(await alice.core.trust(bob.device.certificate), 'unverified')
+      await assert.rejects(alice.core.acknowledgeDevice(bob.device.certificate), { code: 'safety:not-verified' })
+      await alice.core.markVerified(bob.device.certificate)
+      assert.equal(await alice.core.trust(bob.device.certificate), 'verified')
+      await alice.core.unverify('bob@tessel.example')
+      assert.equal(await alice.core.trust(bob.device.certificate), 'unverified')
+    })
+
+    test(`${transport}: a message written offline is sent after a restart`, async () => {
+      const { alice, bob, group } = await pair(make)
+      const { messageId } = await alice.core.queueMessage(group, { type: 'text', text: 'written offline' }, 1_000)
+      await alice.core.close()
+
+      const restarted = make(alice.database)
+      await restarted.start()
+      const relayed: OutboundMessage[] = []
+      const sender = new OutboxSender(outboxOf(restarted), { send: async (message) => void relayed.push(message) }, { connectivity: new EventTarget() })
+      await sender.flush()
+      assert.deepEqual(
+        relayed.map((message) => message.messageId),
+        [messageId],
+      )
+      assert.deepEqual(await restarted.waitingMessages(group), [])
+      const [message] = relayed
+      assert.ok(message)
+      const incoming = await bob.core.process(message.encrypted)
+      assert.ok(incoming.type === 'message')
+      assert.deepEqual(incoming.message?.body, { type: 'text', text: 'written offline' })
+    })
+  }
+}

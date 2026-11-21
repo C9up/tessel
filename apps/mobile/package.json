@@ -1,0 +1,33 @@
+{
+  "name": "@tessel/mobile",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Tessel on Android, on Ream's mobile stack (orbit): for now, the phone check of the core's mobile binding (story 02-13).",
+  "type": "module",
+  "scripts": {
+    "android": "ream android:run",
+    "typecheck": "tsc --noEmit -p ."
+  },
+  "dependencies": {
+    "@babel/runtime": "^7.29.15",
+    "@c9up/aurora": "^0.1.53",
+    "@c9up/orbit": "^0.1.0",
+    "@c9up/photon": "^0.1.25",
+    "@react-native-community/cli": "^20.0.0",
+    "@react-native/codegen": "0.87.1",
+    "@react-native/gradle-plugin": "0.87.1",
+    "@react-native/metro-config": "0.87.1",
+    "@tessel/core-mobile": "workspace:*",
+    "@tessel/core-web": "workspace:*",
+    "react-native": "0.87.1"
+  },
+  "devDependencies": {
+    "@c9up/ream": "^0.2.31",
+    "@c9up/ream-cli": "^0.3.22",
+    "@swc-node/register": "^1.12.1",
+    "@swc/core": "^1.16.22",
+    "@types/node": "^24.19.2",
+    "typescript": "~6.0.3"
+  },
+  "license": "MIT"
+}

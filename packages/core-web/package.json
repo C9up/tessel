@@ -6,7 +6,10 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./server": "./src/server.ts"
+    "./server": "./src/server.ts",
+    "./api": "./src/api.ts",
+    "./rpc": "./src/rpc.ts",
+    "./contract": "./src/contract.ts"
   },
   "scripts": {
     "build": "../../scripts/build-wasm.sh",

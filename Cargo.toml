@@ -1,6 +1,7 @@
 [workspace]
 resolver = "3"
-members = ["crates/*"]
+# The mobile binding lives in the package that declares it to Ream (`reamNative`).
+members = ["crates/*", "packages/core-mobile/rust"]
 
 [workspace.package]
 edition = "2024"
