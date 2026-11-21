@@ -6,6 +6,8 @@ export default await Env.create(new URL('../', import.meta.url), {
   APP_KEY: Env.schema.secret(),
   NODE_ENV: Env.schema.enum(['development', 'production', 'test'] as const),
   PORT: Env.schema.number(),
+  // The instance's domain, the `domain` of every `name@domain` it hosts (ADR-002).
+  APP_DOMAIN: Env.schema.string({ format: 'host' }),
   // PostgreSQL over mutual TLS only (scripts/stack.sh start writes these lines).
   DB_HOST: Env.schema.string({ format: 'host' }),
   DB_PORT: Env.schema.number(),

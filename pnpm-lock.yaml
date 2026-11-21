@@ -190,9 +190,15 @@ importers:
       '@c9up/ream':
         specifier: ^0.2.30
         version: 0.2.30(@c9up/comet@0.1.5)(@c9up/quasar@0.2.3)(supports-color@8.1.1)
+      '@c9up/rune':
+        specifier: ^0.2.3
+        version: 0.2.3
       '@c9up/spectrum':
         specifier: ^0.1.19
         version: 0.1.19(@c9up/ream@0.2.30)
+      '@tessel/core-web':
+        specifier: workspace:*
+        version: link:../../packages/core-web
       '@tessel/protocol':
         specifier: workspace:*
         version: link:../../packages/protocol
@@ -429,6 +435,10 @@ packages:
         optional: true
       '@c9up/quasar':
         optional: true
+
+  '@c9up/rune@0.2.3':
+    resolution: {integrity: sha512-hhYj7ep3QMOxnsvQuHnGIUUD3Digpm3+KTltK2gPnakkj6tv7kvX3avRl1iYa17Nq26Hsl3ZVOPILIOs7lSPkw==}
+    engines: {node: '>=24.0.0'}
 
   '@c9up/spectrum@0.1.19':
     resolution: {integrity: sha512-yKkfTpBejtqG8pk5hmi8fmnOsrvdiycdNMWr9l2uCYWQ3gNr+9LWvBZXVMq62FrB+Qw0DG/I2Cg/Uhis74qqjg==}
@@ -1016,6 +1026,8 @@ snapshots:
       '@c9up/quasar': 0.2.3(@c9up/ream@0.2.30)(supports-color@8.1.1)
     transitivePeerDependencies:
       - supports-color
+
+  '@c9up/rune@0.2.3': {}
 
   '@c9up/spectrum@0.1.19(@c9up/ream@0.2.30)':
     optionalDependencies:

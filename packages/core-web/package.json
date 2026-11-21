@@ -5,7 +5,8 @@
   "description": "tessel-core for the browser: the WASM module and its loader.",
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./server": "./src/server.ts"
   },
   "scripts": {
     "build": "../../scripts/build-wasm.sh",

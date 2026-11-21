@@ -68,6 +68,7 @@ function breach(module: string, layer: Layer, to: ReturnType<typeof target>, spe
 /** Who owns each table: the module whose migrations create it. A new table is registered here. */
 const OWNER: Record<string, readonly string[]> = {
   shared: ['outbox'],
+  identity: ['accounts', 'devices'],
 }
 const TABLE_OWNER = new Map(Object.entries(OWNER).flatMap(([module, tables]) => tables.map((t): [string, string] => [t, module])))
 const TABLE_RE = /\b(?:FROM|JOIN|INTO|UPDATE|TABLE)\s+([a-z_]+)\b/gi

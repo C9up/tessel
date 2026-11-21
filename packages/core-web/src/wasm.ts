@@ -1,6 +1,7 @@
 /**
- * Loading the WASM module. Only the crypto worker loads it (story 12-01); the page talks
- * to the core through `connect` (`rpc.ts`).
+ * Loading the WASM module. In the browser, only the crypto worker loads it (story 12-01);
+ * the page talks to the core through `RemoteCore` (`rpc.ts`). The server loads it to
+ * verify certificates (`server.ts`).
  */
 
 import init, { generateStoreKey, initSync, selfCheck } from '../generated/tessel_wasm.js'

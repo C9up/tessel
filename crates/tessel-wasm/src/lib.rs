@@ -73,6 +73,13 @@ pub fn verify(key_package: &[u8]) -> Result<JsValue, JsValue> {
     })
 }
 
+/// Checks a device certificate (its account key's signature): what device it names.
+/// The server calls it when an account is created (story 03-01).
+#[wasm_bindgen(js_name = verifyCertificate)]
+pub fn verify_certificate(certificate_bytes: &[u8]) -> Result<JsValue, JsValue> {
+    to_js(&DeviceInfo::of(&certificate(certificate_bytes)?)?)
+}
+
 fn to_js(value: &impl Serialize) -> Result<JsValue, JsValue> {
     value.serialize(&serde_wasm_bindgen::Serializer::new()).js()
 }

@@ -30,9 +30,11 @@
     "@c9up/chronos": "^0.1.16",
     "@c9up/quasar": "^0.2.3",
     "@c9up/ream": "^0.2.30",
+    "@c9up/rune": "^0.2.3",
     "@c9up/spectrum": "^0.1.19",
-    "reflect-metadata": "^0.2.2",
-    "@tessel/protocol": "workspace:*"
+    "@tessel/core-web": "workspace:*",
+    "@tessel/protocol": "workspace:*",
+    "reflect-metadata": "^0.2.2"
   },
   "devDependencies": {
     "@c9up/helix": "^0.2.14",

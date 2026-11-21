@@ -3,7 +3,9 @@
 import type { RpcRouter } from '@c9up/ream/rpc/router'
 import app from '@c9up/ream/services/app'
 import { registerSystemMethods } from '#modules/system/http/systemMethods.js'
+import { registerIdentityMethods } from './identity.js'
 
 const rpc = await app.container.make<RpcRouter>('rpc')
 
 registerSystemMethods(rpc)
+registerIdentityMethods(rpc)
